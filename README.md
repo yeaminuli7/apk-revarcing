@@ -48,29 +48,36 @@ If an older build signed with a different key is already installed, uninstall it
 A full source analysis and build report is in **[ANALYSIS.md](ANALYSIS.md)**.
 Which voice models are worth switching to in 2026 — **[docs/VOICE-MODELS-2026.md](docs/VOICE-MODELS-2026.md)**.
 
-## 🎙️ Built-in voices APK (all models inside, fully offline)
+## 🎙️ Built-in voices APK v2.8 (all models inside, fully offline)
 
-**Download:** https://github.com/yeaminuli7/apk-revarcing/releases/tag/v2.7-builtin
-→ asset `BalaSpeak-v2.7-builtin-allvoices-arm64.apk`
+**Download:** https://github.com/yeaminuli7/apk-revarcing/releases/tag/v2.8-builtin
 
 | | |
 |---|---|
-| Size | 353,786,364 B (338 MiB) |
-| SHA-256 | `99360cc61f27e620242285c94fd5cc5409d67897db10500e1479d71875d81541` |
-| Voices inside | Bangla MMS-TTS (114 MB) · Hindi Piper ×3 (60 MB) · English Kokoro v1.0, 53 speakers (132 MB) |
-| Engine | **Neural only** — the Android system TTS engine is never used |
-| Network | Not needed at all once installed (no first-run downloads) |
-| Storage | ~700 MB free (APK + one-time unpack to internal storage) |
+| Asset | `BalaSpeak-v2.8-builtin-allvoices-arm64.apk` |
+| Size | 365,571,316 B (349 MiB) · versionCode 19 |
+| SHA-256 | `ba829400873a40bd47334d3e2314d35ef222620519de6b29cc7217a51abe2616` |
+| Signature | v1 + v2 + v3, **stable key** (see [keystore/README.md](keystore/README.md)) |
+| Voices | **English 31 characters**, Bangla 6, Hindi 6 — all inside the APK |
+| Engine | Neural only — the Android system TTS engine is never used |
+| Built with | `-PnoMinify` (no R8) so character voices cannot be mangled |
 
-Why it is a Release download and not a file in this repo: git rejects files over
-100 MB, so the 338 MB APK is attached to the release instead. Build it yourself with
-`bash scripts/fetch_builtin_voices.sh` (pulls the 294 MB of models into
-`app/src/main/assets/tts/`) followed by `./gradlew assembleRelease -PnoShrink`.
+### English character cast (v2.8)
 
-This is the build described in [BUILT-IN-VOICES-ROADMAP.md](BUILT-IN-VOICES-ROADMAP.md):
-`NeuralVoiceManager` copies each pack out of the APK assets on first launch
-(`ensurePacksInstalled()` uses the `assetPath` already defined per pack), so every
-voice works immediately, offline, with no download UI.
+Built from the 28 real English speakers in Kokoro v1.0 with per-voice pitch, speed and DSP
+timbres — 31 selectable voices, no robotic system voice anywhere:
+
+**Ages** — baby boy/girl, toddler boy/girl, child boy/girl, teen boy/girl, young man/woman,
+adult man/woman, middle-aged man/woman, elderly man/woman, grandfather, grandmother.
+**Characters** — narrator, hero, villain, **monster**, **demon**, giant, vampire, **robot**,
+**alien**, **ghost**, whisper, witch, chipmunk.
+
+Timbre effects live in `PitchTools.applyFx()`: `GROWL` (ring modulation + saturation) for
+monster/demon/giant/vampire/witch/villain, `METAL` (ring mod + bit reduction) for robot/alien,
+`WHISPER` (low-pass + tremolo) for ghost/whisper.
+
+The slim equivalent (models downloaded on demand) is on the **v2.8-slim** release, which also
+carries an unminified `debug` APK for troubleshooting. Install problems → **[INSTALL.md](INSTALL.md)**.
 
 ## 🔁 How the APK is built (CI)
 

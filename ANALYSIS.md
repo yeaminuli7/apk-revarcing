@@ -169,6 +169,37 @@ Trade-offs to be aware of:
 * versionCode is still 18 for both — if you publish them side by side, give the
   built-in build its own higher versionCode.
 
+
+## 10. v2.8 — signing fix and English character cast
+
+**Install failure ("no signature" / "app not installed").** Root cause: every build up to
+v2.7 generated a throwaway signing key inside CI, and AGP only produced a v2 signature
+(minSdk 24 ⇒ v1 skipped). Consequences:
+
+* a new build can never be installed over the previous one — Android rejects a different
+  signing identity;
+* installers and OEM package managers that only parse the v1 (JAR) signature report the
+  APK as unsigned.
+
+Fixes in v2.8:
+
+1. one **stable keystore** committed at `keystore/balaspeak-release.p12` (alias `upload`,
+   RSA 2048, valid to 2056) — documented as a public sideload key in `keystore/README.md`;
+2. `enableV1Signing` + `enableV2Signing` + `enableV3Signing` in `app/build.gradle.kts`;
+3. CI asserts `META-INF/*.SF` exists in every APK and prints the certificate with
+   `keytool -printcert -jarfile`;
+4. debug builds are signed with the same key, so debug/release APKs can replace each other;
+5. versionCode 18 → 19, versionName 2.7 → 2.8.
+
+**Voice cast.** `PersonaSpec` gained 25 English-only roles, `VoiceCast.Role` gained
+`onlyLang` so they appear only for the English pack, and `NeuralVoiceManager` maps each role to
+a Kokoro speaker id, a speed factor, a pitch factor and an optional `PitchTools.Fx`
+(`GROWL` / `METAL` / `WHISPER`, newly implemented). The built-in-voices APK is compiled with
+`-PnoMinify` so R8 cannot rename or strip any of that.
+
+Artifact: `v2.8-builtin` release, 365,571,316 B,
+sha256 `ba8294…babe2616`, v1+v2+v3 signed, all five model files verified inside the APK.
+
 ## 8. Caveats
 
 * **Not runtime-tested** — no device or emulator here. R8 rules for Room/Moshi/sherpa-onnx/
