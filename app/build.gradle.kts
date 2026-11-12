@@ -14,8 +14,8 @@ android {
     applicationId = "com.aistudio.balaspeak.ytwqzn"
     minSdk = 24
     targetSdk = 36
-    versionCode = 18
-    versionName = "2.7"
+    versionCode = 19
+    versionName = "2.8"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -27,13 +27,27 @@ android {
   }
 
   signingConfigs {
-    val releaseKeystore = file(System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks")
+    // A single, stable release key lives in keystore/ (see keystore/README.md).
+    // KEYSTORE_PATH / STORE_PASSWORD / KEY_ALIAS / STORE_TYPE override it for
+    // private builds (Play Store upload key, CI secrets, ...).
+    val releaseKeystore = file(
+      System.getenv("KEYSTORE_PATH") ?: "${rootDir}/keystore/balaspeak-release.p12"
+    )
     if (releaseKeystore.exists()) {
       create("release") {
         storeFile = releaseKeystore
-        storePassword = System.getenv("STORE_PASSWORD")
-        keyAlias = "upload"
-        keyPassword = System.getenv("KEY_PASSWORD")
+        val pass = System.getenv("STORE_PASSWORD")
+          ?: runCatching { File(rootDir, "keystore/password.txt").readText().trim() }.getOrNull()
+        storePassword = pass
+        keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
+        keyPassword = System.getenv("KEY_PASSWORD") ?: pass
+        storeType = System.getenv("STORE_TYPE")
+          ?: if (releaseKeystore.extension.lowercase() in listOf("p12", "pfx")) "PKCS12" else "JKS"
+        // Sign with every scheme AGP supports. v1 (JAR) is what older devices and
+        // third-party APK installers look for; v2/v3 are what modern Android uses.
+        enableV1Signing = true
+        enableV2Signing = true
+        enableV3Signing = true
       }
     }
     val debugKeystore = file("${rootDir}/debug.keystore")
@@ -56,9 +70,11 @@ android {
       signingConfigs.findByName("release")?.let { signingConfig = it }
     }
     debug {
-      // Use the project debug keystore only when it is actually present.
-      // Otherwise Android Studio's default debug keystore is used.
-      signingConfigs.findByName("debugConfig")?.let { signingConfig = it }
+      // Prefer an explicit debug keystore; otherwise sign debug builds with the
+      // same stable release key so debug/ release APKs can replace each other.
+      val dbg = signingConfigs.findByName("debugConfig")
+        ?: signingConfigs.findByName("release")
+      dbg?.let { signingConfig = it }
     }
   }
   compileOptions {

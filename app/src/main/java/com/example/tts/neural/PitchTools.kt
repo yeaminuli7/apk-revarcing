@@ -3,7 +3,10 @@ package com.example.tts.neural
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.exp
 import kotlin.math.min
+import kotlin.math.sin
+import kotlin.math.tanh
 
 /**
  * Lightweight, dependency-free pitch shifting for persona voices.
@@ -126,5 +129,75 @@ object PitchTools {
             result[i] = out[i].toInt().coerceIn(-32768, 32767).toShort()
         }
         return result
+    }
+
+    // ------------------------------------------------------------------ FX
+    // Character timbres for the English cast (monster, robot, ghost, ...).
+    // Applied after pitch/speed so it costs one pass over 16 kHz audio.
+
+    enum class Fx {
+        NONE,
+        GROWL,   // ring modulation + soft saturation -> monster, demon, giant
+        METAL,   // fast ring modulation + bit reduction -> robot, alien
+        WHISPER  // low-pass + tremolo -> ghost, whisper, witch
+    }
+
+    /**
+     * @param intensity 0..1 strength of the effect.
+     */
+    fun applyFx(input: ShortArray, sampleRate: Int, fx: Fx, intensity: Float = 1f): ShortArray {
+        if (input.isEmpty() || fx == Fx.NONE) return input
+        val k = intensity.coerceIn(0f, 1f)
+        if (k <= 0.01f) return input
+        return when (fx) {
+            Fx.GROWL -> growl(input, sampleRate, k)
+            Fx.METAL -> metal(input, sampleRate, k)
+            Fx.WHISPER -> whisper(input, sampleRate, k)
+            Fx.NONE -> input
+        }
+    }
+
+    private fun growl(input: ShortArray, sampleRate: Int, k: Float): ShortArray {
+        val out = ShortArray(input.size)
+        val modHz = 44.0 + 18.0 * k
+        val depth = 0.42f * k
+        val drive = 1.0f + 1.4f * k
+        val norm = tanh(drive).toFloat()
+        for (i in input.indices) {
+            val x = input[i] / 32768f
+            val mod = 1f - depth + depth * sin(2.0 * PI * modHz * i / sampleRate).toFloat()
+            val y = tanh((x * mod * drive).toDouble()).toFloat() / norm
+            out[i] = (y * 32767f).toInt().coerceIn(-32768, 32767).toShort()
+        }
+        return out
+    }
+
+    private fun metal(input: ShortArray, sampleRate: Int, k: Float): ShortArray {
+        val out = ShortArray(input.size)
+        val modHz = 150.0 + 90.0 * k
+        val depth = 0.55f * k
+        val levels = 48f - 20f * k   // crude bit reduction
+        for (i in input.indices) {
+            val x = input[i] / 32768f
+            val mod = (1f - depth) + depth * (if (sin(2.0 * PI * modHz * i / sampleRate) >= 0.0) 1f else -1f)
+            val quant = kotlin.math.round(x * mod * levels) / levels
+            out[i] = (quant.coerceIn(-1f, 1f) * 32767f).toInt().toShort()
+        }
+        return out
+    }
+
+    private fun whisper(input: ShortArray, sampleRate: Int, k: Float): ShortArray {
+        val out = ShortArray(input.size)
+        // one-pole low-pass (breathier, less body) + slow tremolo
+        val cutoff = 3200f - 1400f * k
+        val alpha = (1.0 - exp(-2.0 * PI * cutoff / sampleRate)).toFloat()
+        var lp = 0f
+        for (i in input.indices) {
+            val x = input[i] / 32768f
+            lp += alpha * (x - lp)
+            val trem = 1f - 0.18f * k * (0.5f + 0.5f * sin(2.0 * PI * 4.5 * i / sampleRate).toFloat())
+            out[i] = (lp * trem * 32767f).toInt().coerceIn(-32768, 32767).toShort()
+        }
+        return out
     }
 }

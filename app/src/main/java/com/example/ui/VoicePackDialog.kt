@@ -128,10 +128,12 @@ fun NeuralVoicePackDialog(
                                 Text("Preview voices:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                 Spacer(Modifier.height(4.dp))
                                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    for (role in VoiceCast.roles) {
+                                    for (role in VoiceCast.roles.filter {
+                                        it.onlyLang == null || it.onlyLang == pack.langCode
+                                    }) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Text(
-                                                "• ${role.bangla}",
+                                                "• ${role.bangla}${if (role.onlyLang != null) " · ${role.english}" else ""}",
                                                 fontSize = 11.sp,
                                                 modifier = Modifier.weight(1f)
                                             )

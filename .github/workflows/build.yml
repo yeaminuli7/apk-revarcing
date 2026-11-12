@@ -14,11 +14,12 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Slim APK (~50 MB): app only, neural voice models are downloaded on demand.
-  # Published to dist/ on the branch.
+  # Slim APK (~50 MB): app only, neural models downloaded on demand.
+  # Published to dist/ on the branch and to the v2.8-slim release
+  # (release + debug build, both signed with the committed stable key).
   # ---------------------------------------------------------------------------
   build:
-    name: Slim APK (models downloaded on demand)
+    name: Slim APK (release + debug)
     if: ${{ !contains(github.event.head_commit.message, '[builtin]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -46,59 +47,96 @@ jobs:
       - name: Fetch sherpa-onnx AAR (48 MB, not on Maven)
         run: bash scripts/fetch_sherpa_onnx_aar.sh
 
-      - name: Generate signing keystore
+      - name: Prepare signing key
         run: |
           set -e
-          keytool -genkeypair -v \
-            -keystore "$GITHUB_WORKSPACE/my-upload-key.jks" \
-            -storepass "${{ secrets.APK_STORE_PASSWORD || 'balaspeak2026' }}" \
-            -keypass  "${{ secrets.APK_STORE_PASSWORD || 'balaspeak2026' }}" \
-            -alias upload -keyalg RSA -keysize 2048 -validity 10950 \
-            -dname "CN=BalaSpeak, OU=Mobile, O=BalaSpeak, L=Dhaka, C=BD"
+          if [ -f keystore/balaspeak-release.p12 ]; then
+            echo "✓ using committed release keystore (stable signature)"
+            echo "STORE_TYPE=PKCS12" >> "$GITHUB_ENV"
+            echo "STORE_PASSWORD=$(cat keystore/password.txt)" >> "$GITHUB_ENV"
+            echo "KEY_ALIAS=upload" >> "$GITHUB_ENV"
+          else
+            echo "committed keystore missing — generating a throwaway key"
+            keytool -genkeypair -v \
+              -keystore "$GITHUB_WORKSPACE/my-upload-key.jks" \
+              -storepass balaspeak2026 -keypass balaspeak2026 \
+              -alias upload -keyalg RSA -keysize 2048 -validity 10950 \
+              -dname "CN=BalaSpeak, OU=Mobile, O=BalaSpeak, L=Dhaka, C=BD"
+            echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/my-upload-key.jks" >> "$GITHUB_ENV"
+            echo "STORE_TYPE=JKS" >> "$GITHUB_ENV"
+            echo "STORE_PASSWORD=balaspeak2026" >> "$GITHUB_ENV"
+            echo "KEY_ALIAS=upload" >> "$GITHUB_ENV"
+          fi
 
       - name: Build debug APK
-        env:
-          KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
-          STORE_PASSWORD: ${{ secrets.APK_STORE_PASSWORD || 'balaspeak2026' }}
-          KEY_PASSWORD: ${{ secrets.APK_STORE_PASSWORD || 'balaspeak2026' }}
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon --no-configuration-cache --stacktrace assembleDebug
 
       - name: Build release APK (R8, minified)
-        continue-on-error: true
-        env:
-          KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
-          STORE_PASSWORD: ${{ secrets.APK_STORE_PASSWORD || 'balaspeak2026' }}
-          KEY_PASSWORD: ${{ secrets.APK_STORE_PASSWORD || 'balaspeak2026' }}
         run: ./gradlew --no-daemon --no-configuration-cache --stacktrace assembleRelease
+
+      - name: Verify signatures (v1 + certificate)
+        run: |
+          set -e
+          APK=app/build/outputs/apk/release/app-release.apk
+          for f in app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/debug/app-debug.apk; do
+            echo "--- $f ---"
+            if unzip -l "$f" | grep -qE 'META-INF/[^/]+\.(SF|RSA|EC)'; then
+              echo "✓ v1 (JAR) signature present"
+            else
+              echo "✗ no v1 signature"; exit 1
+            fi
+            keytool -printcert -jarfile "$f" | grep -E 'Owner|Valid|SHA256:' | head -4 || true
+          done
 
       - name: Collect APKs
         run: |
           set -e
           mkdir -p dist staging
           rm -f dist/*.apk || true
-          if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
-            cp app/build/outputs/apk/debug/app-debug.apk staging/BalaSpeak-v2.7-debug-arm64.apk
-          fi
-          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
-            cp app/build/outputs/apk/release/app-release.apk staging/BalaSpeak-v2.7-release-arm64.apk
-          fi
-          if [ -f staging/BalaSpeak-v2.7-release-arm64.apk ]; then
-            cp staging/BalaSpeak-v2.7-release-arm64.apk dist/
-          else
-            cp staging/BalaSpeak-v2.7-debug-arm64.apk dist/
-          fi
+          cp app/build/outputs/apk/debug/app-debug.apk staging/BalaSpeak-v2.8-debug-arm64.apk
+          cp app/build/outputs/apk/release/app-release.apk staging/BalaSpeak-v2.8-release-arm64.apk
+          cp staging/BalaSpeak-v2.8-release-arm64.apk dist/
           ls -lh staging dist
-          test -n "$(ls -A dist)"
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: BalaSpeak-v2.7-apk
+          name: BalaSpeak-v2.8-apk
           path: staging/*.apk
           if-no-files-found: error
           compression-level: 0
+
+      - name: Publish slim APKs to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          TAG=v2.8-slim
+          NOTES=/tmp/notes-slim.md
+          cat > "$NOTES" <<'NOTES_EOF'
+          Slim build: the app only. Neural voice packs are downloaded inside the app
+          (Settings -> AI Voice Packs); nothing is bundled in the APK.
+
+          Two assets, same signature, pick one:
+
+          - `BalaSpeak-v2.8-release-arm64.apk` - 50 MB, R8-minified. **Use this one.**
+          - `BalaSpeak-v2.8-debug-arm64.apk` - 70 MB, not minified. Use it if the release
+            build misbehaves; it behaves identically but is slower and larger.
+
+          **If installation fails:** uninstall any older BalaSpeak build first (previous
+          versions used a different signing key), then install again. On Android 7 the
+          installer needs the v1 signature - it is included in this build.
+          NOTES_EOF
+          sed -i 's/^          //' "$NOTES"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" staging/*.apk --clobber
+            gh release edit "$TAG" --notes-file "$NOTES"
+          else
+            gh release create "$TAG" staging/*.apk \
+              --title "BalaSpeak v2.8 - slim APK (arm64)" --notes-file "$NOTES"
+          fi
 
       - name: Publish APK to branch (dist/)
         run: |
@@ -107,14 +145,15 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -f dist
           if git diff --cached --quiet; then echo "no changes"; exit 0; fi
-          git commit -m "ci: BalaSpeak v2.7 arm64 APK [skip ci]"
+          git commit -m "ci: BalaSpeak v2.8 arm64 APK [skip ci]"
           git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || true
           git push origin "HEAD:${GITHUB_REF_NAME}"
 
   # ---------------------------------------------------------------------------
-  # Built-in-voices APK (~340 MB): all neural models inside the APK, works with
-  # no network, never falls back to the device TTS engine. Too large for git, so
-  # it is published as a GitHub Release asset.
+  # Built-in-voices APK (~340 MB): every neural model inside, works with no
+  # network, never falls back to the device TTS engine. Too large for git, so it
+  # is published as a GitHub Release asset. Built WITHOUT R8 minification so the
+  # character voices cannot be broken by shrinking.
   # ---------------------------------------------------------------------------
   builtin:
     name: Built-in voices APK (all languages, offline)
@@ -148,27 +187,33 @@ jobs:
       - name: Bundle neural voice models into assets (294 MB)
         run: bash scripts/fetch_builtin_voices.sh
 
-      - name: Generate signing keystore
+      - name: Prepare signing key
         run: |
           set -e
-          keytool -genkeypair -v \
-            -keystore "$GITHUB_WORKSPACE/my-upload-key.jks" \
-            -storepass "${{ secrets.APK_STORE_PASSWORD || 'balaspeak2026' }}" \
-            -keypass  "${{ secrets.APK_STORE_PASSWORD || 'balaspeak2026' }}" \
-            -alias upload -keyalg RSA -keysize 2048 -validity 10950 \
-            -dname "CN=BalaSpeak, OU=Mobile, O=BalaSpeak, L=Dhaka, C=BD"
+          if [ -f keystore/balaspeak-release.p12 ]; then
+            echo "✓ using committed release keystore (stable signature)"
+            echo "STORE_TYPE=PKCS12" >> "$GITHUB_ENV"
+            echo "STORE_PASSWORD=$(cat keystore/password.txt)" >> "$GITHUB_ENV"
+            echo "KEY_ALIAS=upload" >> "$GITHUB_ENV"
+          else
+            echo "committed keystore missing — generating a throwaway key"
+            keytool -genkeypair -v \
+              -keystore "$GITHUB_WORKSPACE/my-upload-key.jks" \
+              -storepass balaspeak2026 -keypass balaspeak2026 \
+              -alias upload -keyalg RSA -keysize 2048 -validity 10950 \
+              -dname "CN=BalaSpeak, OU=Mobile, O=BalaSpeak, L=Dhaka, C=BD"
+            echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/my-upload-key.jks" >> "$GITHUB_ENV"
+            echo "STORE_TYPE=JKS" >> "$GITHUB_ENV"
+            echo "STORE_PASSWORD=balaspeak2026" >> "$GITHUB_ENV"
+            echo "KEY_ALIAS=upload" >> "$GITHUB_ENV"
+          fi
 
-      - name: Build release APK with bundled voices
-        env:
-          KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
-          STORE_PASSWORD: ${{ secrets.APK_STORE_PASSWORD || 'balaspeak2026' }}
-          KEY_PASSWORD: ${{ secrets.APK_STORE_PASSWORD || 'balaspeak2026' }}
+      - name: Build release APK with bundled voices (no R8)
         run: |
           chmod +x gradlew
-          # -PnoShrink: keep resource shrinking off so nothing can touch assets/tts
-          ./gradlew --no-daemon --no-configuration-cache --stacktrace assembleRelease -PnoShrink
+          ./gradlew --no-daemon --no-configuration-cache --stacktrace assembleRelease -PnoMinify
 
-      - name: Verify voice assets are inside the APK
+      - name: Verify voices and signature inside the APK
         run: |
           set -e
           APK=app/build/outputs/apk/release/app-release.apk
@@ -181,39 +226,40 @@ jobs:
                    assets/tts/hi/rohan/vits-piper-hi_IN-rohan-medium-int8.tar.bz2 \
                    assets/tts/hi/priyamvada/vits-piper-hi_IN-priyamvada-medium-int8.tar.bz2 \
                    assets/tts/en/kokoro-int8-multi-lang-v1_0.tar.bz2; do
-            if grep -q " $f$" <<< "$LIST"; then
-              echo "✓ bundled: $f"
-            else
-              echo "✗ MISSING: $f"; fail=1
-            fi
+            grep -q " $f$" <<< "$LIST" && echo "✓ bundled: $f" || { echo "✗ MISSING: $f"; fail=1; }
           done
           [ "$fail" -eq 0 ] || { echo "Voice assets missing from APK"; exit 1; }
-          # No stale download-only build: assets must account for most of the APK.
           bytes=$(stat -c %s "$APK")
           [ "$bytes" -gt 300000000 ] || { echo "APK is only $bytes bytes — models were not bundled"; exit 1; }
+          if unzip -l "$APK" | grep -qE 'META-INF/[^/]+\.(SF|RSA|EC)'; then
+            echo "✓ v1 (JAR) signature present"
+          else
+            echo "✗ no v1 signature"; exit 1
+          fi
+          keytool -printcert -jarfile "$APK" | grep -E 'Owner|Valid|SHA256:' | head -4
 
       - name: Stage release asset
         run: |
           set -e
           mkdir -p out dist
-          cp app/build/outputs/apk/release/app-release.apk out/BalaSpeak-v2.7-builtin-allvoices-arm64.apk
-          SIZE=$(stat -c %s out/BalaSpeak-v2.7-builtin-allvoices-arm64.apk)
-          SHA=$(sha256sum out/BalaSpeak-v2.7-builtin-allvoices-arm64.apk | cut -d' ' -f1)
-          echo "SIZE=$SIZE" >> "$GITHUB_ENV"
-          echo "SHA=$SHA" >> "$GITHUB_ENV"
+          cp app/build/outputs/apk/release/app-release.apk out/BalaSpeak-v2.8-builtin-allvoices-arm64.apk
+          SIZE=$(stat -c %s out/BalaSpeak-v2.8-builtin-allvoices-arm64.apk)
+          SHA=$(sha256sum out/BalaSpeak-v2.8-builtin-allvoices-arm64.apk | cut -d' ' -f1)
           {
-            echo "BalaSpeak v2.7 — built-in voices (all languages)"
+            echo "BalaSpeak v2.8 — built-in voices (all languages)"
             echo "built:  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "commit: ${GITHUB_SHA}"
-            echo "asset:  BalaSpeak-v2.7-builtin-allvoices-arm64.apk"
+            echo "asset:  BalaSpeak-v2.8-builtin-allvoices-arm64.apk"
             echo "size:   ${SIZE} bytes ($(numfmt --to=iec "$SIZE"))"
             echo "sha256: ${SHA}"
-            echo "abi:    arm64-v8a (minSdk 24, targetSdk 36)"
-            echo "models: Bangla MMS-TTS 114 MB · Hindi Piper x3 60 MB · English Kokoro v1.0 132 MB"
-            echo "engine: neural only — the device TTS engine is never used"
+            echo "signed: v1 + v2 + v3, stable keystore (keystore/balaspeak-release.p12)"
+            echo "built without R8 minification (character voices stay intact)"
+            echo "abi:    arm64-v8a (minSdk 24, targetSdk 36, versionCode 19)"
+            echo "voices: English 31 characters (ages + monster/robot/ghost/...), Bangla 6, Hindi 6"
+            echo "models: Bangla MMS 114 MB · Hindi Piper x3 60 MB · English Kokoro v1.0 132 MB"
             echo
             echo "bundled assets:"
-            unzip -l out/BalaSpeak-v2.7-builtin-allvoices-arm64.apk | grep ' assets/tts/' | awk '{printf "  %10s  %s\n", $1, $4}'
+            unzip -l out/BalaSpeak-v2.8-builtin-allvoices-arm64.apk | grep ' assets/tts/' | awk '{printf "  %10s  %s\n", $1, $4}'
           } > dist/BUILTIN-INFO.txt
           cat dist/BUILTIN-INFO.txt
 
@@ -222,35 +268,37 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
-          TAG="v2.7-builtin"
-          ASSET=out/BalaSpeak-v2.7-builtin-allvoices-arm64.apk
-          cat > /tmp/release-notes.md <<'NOTES'
+          TAG="v2.8-builtin"
+          ASSET=out/BalaSpeak-v2.8-builtin-allvoices-arm64.apk
+          cat > /tmp/notes.md <<'NOTES_EOF'
           Fully offline build: every neural voice model is inside the APK. Nothing is
           downloaded on first run, and the Android system TTS engine is never used.
 
-          **Install:** download `BalaSpeak-v2.7-builtin-allvoices-arm64.apk`, copy it to the
-          phone, tap it and allow install from unknown sources.
-          Requires Android 7.0+ (arm64) and about 700 MB of free storage
-          (the APK plus its one-time unpack of the models).
+          **Install:** download `BalaSpeak-v2.8-builtin-allvoices-arm64.apk`, copy it to the
+          phone, tap it, allow install from unknown sources. Requires Android 7.0+ (arm64)
+          and about 700 MB free storage (the APK plus its one-time unpack).
 
-          **First launch:** the app unpacks the bundled voices into internal storage
-          (30-60 s). After that it works with no internet at all — voices included.
+          **Upgrading from v2.7:** v2.7 builds were signed with a throwaway key, so uninstall
+          the old app first. From v2.8 on, the signature is stable and updates install over
+          each other.
+
+          **English voices:** 31 characters — baby, toddler, child, teen, young adult,
+          middle-aged, grandparent, plus narrator, hero, villain, monster, demon, giant,
+          vampire, robot, alien, ghost, whisper, witch and chipmunk (real Kokoro speakers
+          with pitch/speed shaping and DSP timbre).
 
           **API keys:** subtitle translation and transcription still need a Gemini key
           (and optionally Groq) entered in Settings. No key is baked into the APK.
-
-          Bundled voices: Bangla (MMS-TTS, 6 personas) · Hindi (3 Piper speakers) ·
-          English (Kokoro v1.0, 53 speakers, af_heart).
-          NOTES
-          sed -i 's/^          //' /tmp/release-notes.md
+          NOTES_EOF
+          sed -i 's/^          //' /tmp/notes.md
           if gh release view "$TAG" > /dev/null 2>&1; then
             echo "Release $TAG exists — replacing asset"
             gh release upload "$TAG" "$ASSET" --clobber
-            gh release edit "$TAG" --notes-file /tmp/release-notes.md
+            gh release edit "$TAG" --notes-file /tmp/notes.md
           else
             gh release create "$TAG" "$ASSET" \
-              --title "BalaSpeak v2.7 — built-in voices (Bangla · Hindi · English)" \
-              --notes-file /tmp/release-notes.md
+              --title "BalaSpeak v2.8 — built-in voices + 31 English characters" \
+              --notes-file /tmp/notes.md
           fi
           gh release view "$TAG" --json tagName,assets
 

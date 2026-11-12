@@ -372,7 +372,11 @@ class NeuralVoiceManager private constructor(context: Context) {
 
         return try {
             when (packs.first { it.langCode == lang }.engine) {
-                "kokoro" -> synthesizeSherpa("en", kokoroSidFor(roleId), text, speed, pitch * kokoroPitchFor(roleId), outFile)
+                "kokoro" -> synthesizeSherpa(
+                    "en", kokoroSidFor(roleId), text,
+                    speed * kokoroSpeedFor(roleId), pitch * kokoroPitchFor(roleId),
+                    outFile, fxFor(roleId), fxIntensityFor(roleId)
+                )
                 "piper" -> {
                     val voiceDir = piperVoiceFor(roleId)
                     synthesizeSherpa("hi:$voiceDir", 0, text, speed * speedForRole(roleId), pitch * pitchForRole(roleId), outFile)
@@ -392,7 +396,9 @@ class NeuralVoiceManager private constructor(context: Context) {
         text: String,
         speed: Float,
         pitchFactor: Float,
-        outFile: File
+        outFile: File,
+        fx: PitchTools.Fx = PitchTools.Fx.NONE,
+        fxIntensity: Float = 1f
     ): Boolean {
         val engine = sherpaEngine(engineKey) ?: return false
         val genSpeed = speed.coerceIn(0.5f, 2.0f)
@@ -400,6 +406,9 @@ class NeuralVoiceManager private constructor(context: Context) {
         var pcm = ShortArray(audio.samples.size) { (audio.samples[it] * 32767f).toInt().toShort() }
         val nativeRate = audio.sampleRate
         pcm = applyPersonaDsp(pcm, nativeRate, pitchFactor, 1f)
+        if (pcm.isNotEmpty() && fx != PitchTools.Fx.NONE) {
+            pcm = PitchTools.applyFx(pcm, TARGET_SAMPLE_RATE, fx, fxIntensity)
+        }
         if (pcm.isEmpty()) return false
         WavIo.write16kMono(outFile, pcm)
         return true
@@ -508,8 +517,33 @@ class NeuralVoiceManager private constructor(context: Context) {
     // durations separate strongly (elderly 4.0s vs young 2.6s vs child 1.8s).
     private fun speedForRole(roleId: String): Float = when (roleId) {
         PersonaSpec.ELDERLY_MALE, PersonaSpec.ELDERLY_FEMALE -> 0.84f
+        PersonaSpec.GRANDPA, PersonaSpec.GRANDMA -> 0.84f
         PersonaSpec.CHILD_BOY, PersonaSpec.CHILD_GIRL -> 1.12f
+        PersonaSpec.BABY_BOY, PersonaSpec.BABY_GIRL,
+        PersonaSpec.TODDLER_BOY, PersonaSpec.TODDLER_GIRL -> 1.14f
+        PersonaSpec.GIANT -> 0.78f
+        PersonaSpec.CHIPMUNK -> 1.24f
+        PersonaSpec.MONSTER, PersonaSpec.DEMON, PersonaSpec.VAMPIRE -> 0.88f
         else -> 0.98f
+    }
+
+    /** Speed shaping used for the Kokoro (English) cast. */
+    private fun kokoroSpeedFor(roleId: String): Float = when (roleId) {
+        PersonaSpec.ELDERLY_MALE, PersonaSpec.ELDERLY_FEMALE,
+        PersonaSpec.GRANDPA, PersonaSpec.GRANDMA -> 0.88f
+        PersonaSpec.BABY_BOY, PersonaSpec.BABY_GIRL,
+        PersonaSpec.TODDLER_BOY, PersonaSpec.TODDLER_GIRL -> 1.10f
+        PersonaSpec.CHILD_BOY, PersonaSpec.CHILD_GIRL -> 1.06f
+        PersonaSpec.TEEN_BOY, PersonaSpec.TEEN_GIRL -> 1.03f
+        PersonaSpec.MIDDLE_MALE, PersonaSpec.MIDDLE_FEMALE -> 0.97f
+        PersonaSpec.NARRATOR -> 0.93f
+        PersonaSpec.GIANT -> 0.80f
+        PersonaSpec.MONSTER, PersonaSpec.DEMON, PersonaSpec.VAMPIRE -> 0.88f
+        PersonaSpec.VILLAIN -> 0.86f
+        PersonaSpec.ROBOT -> 0.96f
+        PersonaSpec.GHOST, PersonaSpec.WHISPER, PersonaSpec.WITCH -> 0.90f
+        PersonaSpec.CHIPMUNK -> 1.22f
+        else -> 1f
     }
 
     private fun pitchForRole(roleId: String): Float = when (roleId) {
@@ -519,18 +553,85 @@ class NeuralVoiceManager private constructor(context: Context) {
         PersonaSpec.YOUNG_FEMALE -> 1.10f
         PersonaSpec.CHILD_BOY -> 1.38f
         PersonaSpec.CHILD_GIRL -> 1.40f
+        PersonaSpec.GRANDPA -> 0.74f
+        PersonaSpec.GRANDMA -> 0.86f
+        PersonaSpec.BABY_BOY -> 1.62f
+        PersonaSpec.BABY_GIRL -> 1.65f
+        PersonaSpec.TODDLER_BOY -> 1.50f
+        PersonaSpec.TODDLER_GIRL -> 1.52f
+        PersonaSpec.TEEN_BOY -> 1.12f
+        PersonaSpec.TEEN_GIRL -> 1.10f
+        PersonaSpec.MONSTER -> 0.62f
+        PersonaSpec.DEMON -> 0.60f
+        PersonaSpec.GIANT -> 0.58f
+        PersonaSpec.VAMPIRE -> 0.72f
+        PersonaSpec.VILLAIN -> 0.80f
+        PersonaSpec.ROBOT -> 0.95f
+        PersonaSpec.ALIEN -> 1.24f
+        PersonaSpec.GHOST -> 0.95f
+        PersonaSpec.CHIPMUNK -> 1.55f
         else -> 1f
     }
 
-    /** Kokoro v1.0 speaker ids (53 speakers; English studio cast). */
+    /**
+     * Kokoro v1.0 speaker ids (53 speakers, 28 of them English).
+     * 0-10 af_*, 11-19 am_*, 20-23 bf_*, 24-27 bm_*.
+     */
     private fun kokoroSidFor(roleId: String): Int = when (roleId) {
-        PersonaSpec.ELDERLY_MALE -> 17  // am_onyx (deep male)
-        PersonaSpec.ELDERLY_FEMALE -> 21 // bf_emma (mature British)
-        PersonaSpec.YOUNG_MALE -> 16    // am_michael
-        PersonaSpec.YOUNG_FEMALE -> 3   // af_heart — the flagship young female voice
-        PersonaSpec.CHILD_BOY -> 18     // am_puck (lively; +pitch for a boy)
-        PersonaSpec.CHILD_GIRL -> 23    // bf_lily (light; +pitch for a girl)
+        PersonaSpec.ELDERLY_MALE -> 17      // am_onyx (deep male)
+        PersonaSpec.ELDERLY_FEMALE -> 21    // bf_emma (mature British)
+        PersonaSpec.YOUNG_MALE -> 16        // am_michael
+        PersonaSpec.YOUNG_FEMALE -> 3       // af_heart — flagship young female
+        PersonaSpec.CHILD_BOY -> 18         // am_puck (lively)
+        PersonaSpec.CHILD_GIRL -> 23        // bf_lily (light)
+        PersonaSpec.BABY_BOY -> 18          // am_puck + strong pitch lift
+        PersonaSpec.BABY_GIRL -> 23         // bf_lily + strong pitch lift
+        PersonaSpec.TODDLER_BOY -> 19       // am_santa (playful)
+        PersonaSpec.TODDLER_GIRL -> 7       // af_nova (bright)
+        PersonaSpec.TEEN_BOY -> 12          // am_echo (young)
+        PersonaSpec.TEEN_GIRL -> 10         // af_sky
+        PersonaSpec.ADULT_MALE -> 14        // am_fenrir (warm)
+        PersonaSpec.ADULT_FEMALE -> 2       // af_bella
+        PersonaSpec.MIDDLE_MALE -> 26       // bm_george (mature British male)
+        PersonaSpec.MIDDLE_FEMALE -> 9      // af_sarah
+        PersonaSpec.GRANDPA -> 27           // bm_lewis
+        PersonaSpec.GRANDMA -> 20           // bf_alice
+        PersonaSpec.NARRATOR -> 17          // am_onyx, slower + deeper
+        PersonaSpec.HERO -> 14              // am_fenrir
+        PersonaSpec.VILLAIN -> 26           // bm_george
+        PersonaSpec.MONSTER -> 17           // am_onyx + growl
+        PersonaSpec.DEMON -> 25             // bm_fable + growl
+        PersonaSpec.GIANT -> 17             // am_onyx, very deep
+        PersonaSpec.VAMPIRE -> 24           // bm_daniel
+        PersonaSpec.ROBOT -> 12             // am_echo + metallic FX
+        PersonaSpec.ALIEN -> 12             // am_echo + metallic FX
+        PersonaSpec.GHOST -> 6              // af_nicole (airy)
+        PersonaSpec.WHISPER -> 6            // af_nicole
+        PersonaSpec.WITCH -> 22             // bf_isabella
+        PersonaSpec.CHIPMUNK -> 10          // af_sky + big pitch lift
         else -> 16
+    }
+
+    /** Character timbre applied after pitch/speed shaping. */
+    private fun fxFor(roleId: String): PitchTools.Fx = when (roleId) {
+        PersonaSpec.MONSTER, PersonaSpec.DEMON, PersonaSpec.GIANT,
+        PersonaSpec.VAMPIRE, PersonaSpec.WITCH, PersonaSpec.VILLAIN -> PitchTools.Fx.GROWL
+        PersonaSpec.ROBOT, PersonaSpec.ALIEN -> PitchTools.Fx.METAL
+        PersonaSpec.GHOST, PersonaSpec.WHISPER -> PitchTools.Fx.WHISPER
+        else -> PitchTools.Fx.NONE
+    }
+
+    private fun fxIntensityFor(roleId: String): Float = when (roleId) {
+        PersonaSpec.MONSTER, PersonaSpec.DEMON -> 1f
+        PersonaSpec.GIANT -> 0.8f
+        PersonaSpec.VAMPIRE -> 0.45f
+        PersonaSpec.WITCH -> 0.3f
+        PersonaSpec.VILLAIN -> 0.25f
+        PersonaSpec.ROBOT -> 1f
+        PersonaSpec.ALIEN -> 0.7f
+        PersonaSpec.GHOST -> 1f
+        PersonaSpec.WHISPER -> 0.6f
+        else -> 1f
     }
 
     /** Gentle pitch shaping for Kokoro v1.0 — voices are already age/gender cast. */
@@ -541,6 +642,31 @@ class NeuralVoiceManager private constructor(context: Context) {
         PersonaSpec.YOUNG_FEMALE -> 1.02f
         PersonaSpec.CHILD_BOY -> 1.26f
         PersonaSpec.CHILD_GIRL -> 1.28f
+        PersonaSpec.BABY_BOY -> 1.45f
+        PersonaSpec.BABY_GIRL -> 1.48f
+        PersonaSpec.TODDLER_BOY -> 1.34f
+        PersonaSpec.TODDLER_GIRL -> 1.36f
+        PersonaSpec.TEEN_BOY -> 1.12f
+        PersonaSpec.TEEN_GIRL -> 1.09f
+        PersonaSpec.ADULT_MALE -> 0.98f
+        PersonaSpec.ADULT_FEMALE -> 1.02f
+        PersonaSpec.MIDDLE_MALE -> 0.93f
+        PersonaSpec.MIDDLE_FEMALE -> 0.97f
+        PersonaSpec.GRANDPA -> 0.90f
+        PersonaSpec.GRANDMA -> 0.92f
+        PersonaSpec.NARRATOR -> 0.90f
+        PersonaSpec.HERO -> 0.94f
+        PersonaSpec.VILLAIN -> 0.80f
+        PersonaSpec.MONSTER -> 0.62f
+        PersonaSpec.DEMON -> 0.60f
+        PersonaSpec.GIANT -> 0.58f
+        PersonaSpec.VAMPIRE -> 0.72f
+        PersonaSpec.ROBOT -> 0.95f
+        PersonaSpec.ALIEN -> 1.24f
+        PersonaSpec.GHOST -> 0.95f
+        PersonaSpec.WHISPER -> 0.99f
+        PersonaSpec.WITCH -> 0.86f
+        PersonaSpec.CHIPMUNK -> 1.72f
         else -> 1f
     }
 

@@ -19,7 +19,10 @@ object VoiceCast {
         val english: String,
         val bangla: String,
         val gender: String,
-        val rate: Float
+        val rate: Float,
+        /** null = offered for every language; "en" = English-only character cast. */
+        val onlyLang: String? = null,
+        val pitch: Float = 1f
     )
 
     data class SpeakingProfile(
@@ -30,12 +33,42 @@ object VoiceCast {
     )
 
     val roles: List<Role> = listOf(
-        Role("elderly_male", "Elderly man", "বৃদ্ধ পুরুষ", "male", 0.88f),
-        Role("elderly_female", "Elderly woman", "বৃদ্ধ মহিলা", "female", 0.88f),
+        // ---- core six, every language
+        Role("elderly_male", "Elderly man", "বৃদ্ধ পুরুষ", "male", 0.88f, pitch = 0.88f),
+        Role("elderly_female", "Elderly woman", "বৃদ্ধ মহিলা", "female", 0.88f, pitch = 0.88f),
         Role("young_male", "Young man", "যুবক", "male", 0.96f),
         Role("young_female", "Young woman", "যুবতী", "female", 0.96f),
-        Role("child_boy", "Boy", "শিশু ছেলে", "male", 1.04f),
-        Role("child_girl", "Girl", "শিশু মেয়ে", "female", 1.05f)
+        Role("child_boy", "Boy", "শিশু ছেলে", "male", 1.04f, pitch = 1.20f),
+        Role("child_girl", "Girl", "শিশু মেয়ে", "female", 1.05f, pitch = 1.22f),
+
+        // ---- English-only ages (Kokoro v1.0 cast)
+        Role("baby_boy", "Baby boy (2-3)", "খুদে ছেলে", "male", 1.10f, "en", 1.45f),
+        Role("baby_girl", "Baby girl (2-3)", "খুদে মেয়ে", "female", 1.12f, "en", 1.48f),
+        Role("toddler_boy", "Toddler boy", "টগবগে ছেলে", "male", 1.08f, "en", 1.36f),
+        Role("toddler_girl", "Toddler girl", "টগবগে মেয়ে", "female", 1.09f, "en", 1.38f),
+        Role("teen_boy", "Teenage boy", "কিশোর", "male", 1.04f, "en", 1.12f),
+        Role("teen_girl", "Teenage girl", "কিশোরী", "female", 1.04f, "en", 1.10f),
+        Role("adult_male", "Adult man", "পরিণত পুরুষ", "male", 0.98f, "en", 0.98f),
+        Role("adult_female", "Adult woman", "পরিণত নারী", "female", 1.00f, "en", 1.02f),
+        Role("middle_male", "Middle-aged man", "মধ্যবয়সী পুরুষ", "male", 0.96f, "en", 0.93f),
+        Role("middle_female", "Middle-aged woman", "মধ্যবয়সী নারী", "female", 0.97f, "en", 0.97f),
+        Role("grandpa", "Grandfather", "দাদা", "male", 0.86f, "en", 0.90f),
+        Role("grandma", "Grandmother", "দিদিমা", "female", 0.87f, "en", 0.92f),
+
+        // ---- English-only characters
+        Role("narrator", "Narrator (deep)", "বর্ণনাকারী", "male", 0.92f, "en", 0.90f),
+        Role("hero", "Hero", "নায়ক", "male", 0.96f, "en", 0.94f),
+        Role("villain", "Villain", "খলনায়ক", "male", 0.85f, "en", 0.80f),
+        Role("monster", "Monster", "দানব", "male", 0.88f, "en", 0.62f),
+        Role("demon", "Demon", "শয়তান", "male", 0.84f, "en", 0.60f),
+        Role("giant", "Giant", "দৈত্য", "male", 0.80f, "en", 0.58f),
+        Role("vampire", "Vampire", "ভ্যাম্পায়ার", "male", 0.84f, "en", 0.72f),
+        Role("robot", "Robot", "রোবট", "male", 0.95f, "en", 0.95f),
+        Role("alien", "Alien", "ভিনগ্রহী", "male", 1.00f, "en", 1.24f),
+        Role("ghost", "Ghost", "ভূত", "female", 0.85f, "en", 0.95f),
+        Role("whisper", "Whisper", "ফিসফিস", "female", 0.92f, "en", 0.99f),
+        Role("witch", "Witch", "ডাইনি", "female", 0.90f, "en", 0.86f),
+        Role("chipmunk", "Chipmunk", "কাঠবিড়ালি", "female", 1.25f, "en", 1.55f)
     )
 
     fun speakerId(roleId: String, langCode: String): String {
@@ -58,6 +91,7 @@ object VoiceCast {
         for (lang in languages) {
             val engine = engineForLang(lang)
             for (role in roles) {
+                if (role.onlyLang != null && role.onlyLang != lang) continue
                 out.add(
                     FriendlyVoice(
                         id = speakerId(role.id, lang),
@@ -135,25 +169,7 @@ object VoiceCast {
         return split[0] to split[1].lowercase(Locale.ROOT)
     }
 
-    private fun pitchFor(role: Role, baseGender: String?): Float {
-        if (baseGender == role.gender) {
-            return when (role.id) {
-                "elderly_male", "elderly_female" -> 0.88f
-                "child_boy" -> 1.20f
-                "child_girl" -> 1.22f
-                else -> 1.0f
-            }
-        }
-        return when (role.id) {
-            "elderly_male" -> 0.78f
-            "young_male" -> 0.84f
-            "child_boy" -> 1.08f
-            "elderly_female" -> 1.02f
-            "young_female" -> 1.12f
-            "child_girl" -> 1.26f
-            else -> 1f
-        }
-    }
+    private fun pitchFor(role: Role, baseGender: String?): Float = role.pitch
 
     private fun genderOf(voice: Voice?): String? {
         if (voice == null) return null
