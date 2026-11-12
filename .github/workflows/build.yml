@@ -224,21 +224,35 @@ jobs:
           set -e
           TAG="v2.7-builtin"
           ASSET=out/BalaSpeak-v2.7-builtin-allvoices-arm64.apk
+          cat > /tmp/release-notes.md <<'NOTES'
+          Fully offline build: every neural voice model is inside the APK. Nothing is
+          downloaded on first run, and the Android system TTS engine is never used.
+
+          **Install:** download `BalaSpeak-v2.7-builtin-allvoices-arm64.apk`, copy it to the
+          phone, tap it and allow install from unknown sources.
+          Requires Android 7.0+ (arm64) and about 700 MB of free storage
+          (the APK plus its one-time unpack of the models).
+
+          **First launch:** the app unpacks the bundled voices into internal storage
+          (30-60 s). After that it works with no internet at all — voices included.
+
+          **API keys:** subtitle translation and transcription still need a Gemini key
+          (and optionally Groq) entered in Settings. No key is baked into the APK.
+
+          Bundled voices: Bangla (MMS-TTS, 6 personas) · Hindi (3 Piper speakers) ·
+          English (Kokoro v1.0, 53 speakers, af_heart).
+          NOTES
+          sed -i 's/^          //' /tmp/release-notes.md
           if gh release view "$TAG" > /dev/null 2>&1; then
             echo "Release $TAG exists — replacing asset"
             gh release upload "$TAG" "$ASSET" --clobber
+            gh release edit "$TAG" --notes-file /tmp/release-notes.md
           else
             gh release create "$TAG" "$ASSET" \
               --title "BalaSpeak v2.7 — built-in voices (Bangla · Hindi · English)" \
-              --notes "Fully offline build: all neural voice models are inside the APK, nothing is downloaded on first run and the Android system TTS engine is never used.
-
-**Install:** download \`BalaSpeak-v2.7-builtin-allvoices-arm64.apk\`, copy to the phone, tap it, allow install from unknown apps.
-Requires Android 7.0+ (arm64) and ~700 MB free storage (the APK plus its one-time unpack of the models).
-
-**First launch:** the app unpacks the bundled voices to internal storage (30-60 s). No internet needed afterwards - not even for the voices.
-
-**API keys:** translation/transcription features still need a Gemini (and optionally Groq) key from Settings - no key is baked into the APK."
+              --notes-file /tmp/release-notes.md
           fi
+          gh release view "$TAG" --json tagName,assets
 
       - name: Record build info on the branch
         run: |
