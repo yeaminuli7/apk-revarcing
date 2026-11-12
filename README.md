@@ -47,6 +47,30 @@ If an older build signed with a different key is already installed, uninstall it
 
 A full source analysis and build report is in **[ANALYSIS.md](ANALYSIS.md)**.
 
+## 🎙️ Built-in voices APK (all models inside, fully offline)
+
+**Download:** https://github.com/yeaminuli7/apk-revarcing/releases/tag/v2.7-builtin
+→ asset `BalaSpeak-v2.7-builtin-allvoices-arm64.apk`
+
+| | |
+|---|---|
+| Size | 353,786,364 B (338 MiB) |
+| SHA-256 | `99360cc61f27e620242285c94fd5cc5409d67897db10500e1479d71875d81541` |
+| Voices inside | Bangla MMS-TTS (114 MB) · Hindi Piper ×3 (60 MB) · English Kokoro v1.0, 53 speakers (132 MB) |
+| Engine | **Neural only** — the Android system TTS engine is never used |
+| Network | Not needed at all once installed (no first-run downloads) |
+| Storage | ~700 MB free (APK + one-time unpack to internal storage) |
+
+Why it is a Release download and not a file in this repo: git rejects files over
+100 MB, so the 338 MB APK is attached to the release instead. Build it yourself with
+`bash scripts/fetch_builtin_voices.sh` (pulls the 294 MB of models into
+`app/src/main/assets/tts/`) followed by `./gradlew assembleRelease -PnoShrink`.
+
+This is the build described in [BUILT-IN-VOICES-ROADMAP.md](BUILT-IN-VOICES-ROADMAP.md):
+`NeuralVoiceManager` copies each pack out of the APK assets on first launch
+(`ensurePacksInstalled()` uses the `assetPath` already defined per pack), so every
+voice works immediately, offline, with no download UI.
+
 ## 🔁 How the APK is built (CI)
 
 `.github/workflows/build.yml` runs on every push to any branch:

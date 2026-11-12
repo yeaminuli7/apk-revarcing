@@ -129,6 +129,46 @@ this one without uninstalling first. For an app you will keep updating (or publi
 Play), add repository secrets `KEYSTORE_B64`, `APK_STORE_PASSWORD` and decode them in the
 workflow instead of generating a throwaway key.
 
+
+## 9. Built-in voices variant (v2.7-builtin)
+
+Requested after the first build: models **inside** the APK, device TTS not used.
+
+* `NeuralVoiceManager` already supported this — every `PackDownload` carries an
+  `assetPath`, and `ensurePacksInstalled()` copies from APK assets when the file is
+  present, otherwise downloads. Bundling therefore needed **no engine changes**,
+  only the assets plus one script: `scripts/fetch_builtin_voices.sh`.
+* The device TTS engine was already unused in v2.7 (no `TextToSpeech` object is
+  created anywhere; `TextToSpeechManager` is a neural-only facade). Remaining
+  cleanup: the "Open System TTS Voice Settings" button in Settings was removed.
+* Build: `assembleRelease -PnoShrink` (resource shrinking disabled so nothing can
+  strip `assets/tts`), R8 minification kept.
+
+Verified in CI and through the GitHub API:
+
+```
+asset      : BalaSpeak-v2.7-builtin-allvoices-arm64.apk
+size       : 353,786,364 B (338 MiB)          (API size == CI size)
+sha256     : 99360cc61f27e620242285c94fd5cc5409d67897db10500e1479d71875d81541
+             == GitHub's own asset digest → upload intact
+assets/tts : bn/model.onnx                114,417,798
+             en/kokoro-...-v1_0.tar.bz2   132,353,410
+             hi/pratham/...tar.bz2         20,987,965
+             hi/rohan/...tar.bz2           21,064,499
+             hi/priyamvada/...tar.bz2      21,097,319
+             bn_vocab.json                      927
+```
+
+Trade-offs to be aware of:
+
+* Install footprint is roughly APK + unpacked models (~650-700 MB) because
+  sherpa-onnx needs real file paths, so assets must be extracted to `filesDir`
+  on first launch (30-60 s).
+* Both APKs are signed with a throwaway CI key generated per run, so switching
+  between the slim and built-in builds requires an uninstall first.
+* versionCode is still 18 for both — if you publish them side by side, give the
+  built-in build its own higher versionCode.
+
 ## 8. Caveats
 
 * **Not runtime-tested** — no device or emulator here. R8 rules for Room/Moshi/sherpa-onnx/
