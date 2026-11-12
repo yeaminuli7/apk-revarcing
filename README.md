@@ -46,6 +46,7 @@ If an older build signed with a different key is already installed, uninstall it
    English (~132 MB) for the offline neural voices. Everything else works without them.
 
 A full source analysis and build report is in **[ANALYSIS.md](ANALYSIS.md)**.
+Which voice models are worth switching to in 2026 — **[docs/VOICE-MODELS-2026.md](docs/VOICE-MODELS-2026.md)**.
 
 ## 🎙️ Built-in voices APK (all models inside, fully offline)
 
