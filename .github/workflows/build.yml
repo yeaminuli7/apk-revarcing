@@ -78,6 +78,7 @@ jobs:
         run: |
           set -e
           mkdir -p dist staging
+          rm -f dist/*.apk || true
           ls -l app/build/outputs/apk/debug/ || true
           ls -l app/build/outputs/apk/release/ || true
           if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
@@ -109,7 +110,6 @@ jobs:
           set -e
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          rm -rf dist
           ls -lh dist
           git add -f dist
           if git diff --cached --quiet; then echo "no changes"; exit 0; fi
