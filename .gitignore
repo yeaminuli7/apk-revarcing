@@ -20,3 +20,4 @@ debug.keystore
 # CI-only staging for APK artifacts (dist/ is committed by CI with -f)
 /build
 /staging
+/dist
