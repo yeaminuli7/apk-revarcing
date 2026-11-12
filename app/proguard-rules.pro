@@ -51,3 +51,17 @@
 # sherpa-onnx: JNI binds these by name — never shrink/rename
 -keep class com.k2fsa.sherpa.onnx.** { *; }
 -dontwarn com.k2fsa.sherpa.onnx.**
+
+# ---------------------------------------------------------------------------
+# ONNX Runtime Java API (com.microsoft.onnxruntime): JNI resolves Java classes
+# by name, so renaming them breaks inference (Bangla MMS-TTS pack). Keep intact.
+# ---------------------------------------------------------------------------
+-keep class ai.onnxruntime.** { *; }
+-dontwarn ai.onnxruntime.**
+
+# Apache commons-compress references optional codecs (xz/zstd/brotli) that are
+# intentionally absent; silence link warnings for those.
+-dontwarn org.apache.commons.compress.**
+-dontwarn org.tukaani.xz.**
+-dontwarn com.github.luben.zstd.**
+-dontwarn org.brotli.**
