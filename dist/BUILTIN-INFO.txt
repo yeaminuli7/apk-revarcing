@@ -1,12 +1,14 @@
-BalaSpeak v2.7 — built-in voices (all languages)
-built:  2026-11-12T13:31:27Z
-commit: e37ce0b247941f87da22ddda8f31ee55c75ab963
-asset:  BalaSpeak-v2.7-builtin-allvoices-arm64.apk
-size:   353786364 bytes (338M)
-sha256: 99360cc61f27e620242285c94fd5cc5409d67897db10500e1479d71875d81541
-abi:    arm64-v8a (minSdk 24, targetSdk 36)
-models: Bangla MMS-TTS 114 MB · Hindi Piper x3 60 MB · English Kokoro v1.0 132 MB
-engine: neural only — the device TTS engine is never used
+BalaSpeak v2.8 — built-in voices (all languages)
+built:  2026-11-12T15:46:45Z
+commit: 5aa4660c360126e3e5200cea86980d83d01e7da2
+asset:  BalaSpeak-v2.8-builtin-allvoices-arm64.apk
+size:   365571316 bytes (349M)
+sha256: ba829400873a40bd47334d3e2314d35ef222620519de6b29cc7217a51abe2616
+signed: v1 + v2 + v3, stable keystore (keystore/balaspeak-release.p12)
+built without R8 minification (character voices stay intact)
+abi:    arm64-v8a (minSdk 24, targetSdk 36, versionCode 19)
+voices: English 31 characters (ages + monster/robot/ghost/...), Bangla 6, Hindi 6
+models: Bangla MMS 114 MB · Hindi Piper x3 60 MB · English Kokoro v1.0 132 MB
 
 bundled assets:
    114417798  assets/tts/bn/model.onnx
