@@ -102,23 +102,32 @@ emulators or on 32-bit-only ARM devices.
 
 ## 7. Verification of the produced APK
 
+Final artifact: `dist/BalaSpeak-v2.7-release-arm64.apk` (also published on the branch)
+
 ```
-file      : BalaSpeak-v2.7-release-arm64.apk     50.0 MiB (52 429 738 B, 455 entries)
+file      : BalaSpeak-v2.7-release-arm64.apk     50.0 MiB (52 462 506 B, 455 entries)
+sha256    : 7cdff9fe d2a4004d 043d2a80 25bc3abf b588d9a5 8780ba0f 288e8ce5 cab266f7
 package   : com.aistudio.balaspeak.ytwqzn
 version   : 2.7 (versionCode 18)
 sdk       : minSdk 24  targetSdk 36  compileSdk 36.1
-label     : BalaSpeak
-signature : APK Signing Block v2 ✓  (v1 absent — expected: minSdk ≥ 24)
-cert      : CN=BalaSpeak, O=BalaSpeak, L=Dhaka, C=BD · SHA-256 F7:80:2F:8E:…:9E:AE
-            valid 2026-11-12 → 2056-11-04 · debuggable = false
-sha256    : 0a288ac939247f673eb5b6eadbc146ed3dfe72e3c6026f88a12b9c854f55ba63
-native    : lib/arm64-v8a/{libonnxruntime, libonnxruntime4j_jni, libsherpa-onnx-c-api,
-            libsherpa-onnx-cxx-api, libsherpa-onnx-jni, libtranslate_jni,
-            libandroidx.graphics.path}.so  (~49 MB of the 50 MB)
+signature : APK Signing Block v2 ✓  (v1 absent — expected, minSdk ≥ 24)
+cert      : CN=BalaSpeak, O=BalaSpeak, L=Dhaka, C=BD
+            SHA-256 D6:E0:B4:44:AA:7F:61:0E:…:3C:F0:51:19 · valid 2026-11-12 → 2056-11-04
+zip       : integrity OK · classes.dex 4.3 MB
+native    : lib/arm64-v8a/  libonnxruntime.so (21.2 MB) · libtranslate_jni.so (15.6 MB)
+            libsherpa-onnx-jni.so (4.6 MB) · libsherpa-onnx-c-api.so · libsherpa-onnx-cxx-api.so
+            libonnxruntime4j_jni.so · libandroidx.graphics.path.so
 ```
 
-Signature validity was checked with `androguard` (PyPI) — manifest, certificate and
-V2 signing block all parse correctly.
+Checked with `androguard` 4.1.4 (PyPI): binary `AndroidManifest.xml` parses (package,
+versions, sdk levels, 13 permissions, 1 activity + 5 services), certificate chain is
+self-consistent, V2 signature block present, ZIP integrity clean, single ABI.
+
+**Keystore note:** the signing key is generated inside the CI job for each build, so the
+certificate fingerprint changes every time — an APK built later cannot be installed *over*
+this one without uninstalling first. For an app you will keep updating (or publish on
+Play), add repository secrets `KEYSTORE_B64`, `APK_STORE_PASSWORD` and decode them in the
+workflow instead of generating a throwaway key.
 
 ## 8. Caveats
 
