@@ -51,7 +51,7 @@ android {
     release {
       isCrunchPngs = false
       isMinifyEnabled = !project.hasProperty("noMinify")
-      isShrinkResources = !project.hasProperty("noMinify")
+      isShrinkResources = !project.hasProperty("noMinify") && !project.hasProperty("noShrink")
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfigs.findByName("release")?.let { signingConfig = it }
     }

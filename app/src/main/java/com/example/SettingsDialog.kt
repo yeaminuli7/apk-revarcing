@@ -756,28 +756,8 @@ fun SettingsModalDialog(
                         )
                     }
 
-                    // System TTS settings link
-                    OutlinedButton(
-                        onClick = {
-                            try {
-                                val intent = Intent("com.android.settings.TTS_SETTINGS")
-                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                context.startActivity(intent)
-                            } catch (e: Exception) {
-                                try {
-                                    val intent = Intent(Settings.ACTION_SETTINGS)
-                                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    context.startActivity(intent)
-                                } catch (e2: Exception) {}
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Icon(Icons.Outlined.SettingsVoice, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Open System TTS Voice Settings", fontSize = 12.sp)
-                    }
+                    // BalaSpeak is neural-only: the Android system TTS engine is never used,
+                    // so there is nothing to configure in the system voice settings.
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
