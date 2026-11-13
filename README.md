@@ -58,9 +58,11 @@ reactive, so it fills itself in as packs become ready:
 | | |
 |---|---|
 | **Built-in (all models inside)** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v2.9-builtin |
-| Asset | `BalaSpeak-v2.9-builtin-allvoices-arm64.apk` · versionCode 20 |
+| Asset | `BalaSpeak-v2.9-builtin-allvoices-arm64.apk` — 365,571,324 B · versionCode 20 |
+| SHA-256 | `1acfb252b1ec3606659ac064868963aabd166eff878d6e8d45bde2be33344165` |
 | **Slim (packs on demand)** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v2.9-slim |
-| Asset | `BalaSpeak-v2.9-release-arm64.apk` (+ unminified `debug`) |
+| Asset | `BalaSpeak-v2.9-release-arm64.apk` (52,500,113 B, sha256 `ca67618a…e36a4`) + unminified `debug` |
+| Verified | `versionName 2.9 / versionCode 20`, v1+v2+v3 signatures, both pickers contain the new empty-state text |
 
 What changed in code: `NeuralVoiceManager.readyLangsFlow` (StateFlow derived from the pack
 states) → `TextToSpeechManager.voicesFlow` → `DocumentViewModel.friendlyVoicesList`. The picker
