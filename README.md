@@ -74,7 +74,9 @@ path, the missing-file list, the last error, plus **এখনই কপি ক�
 | | |
 |---|---|
 | **Built-in** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v3.1-builtin |
-| **Slim** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v3.1-slim |
+| Asset | `BalaSpeak-v3.1-builtin-allvoices-arm64.apk` — 433,527,754 B (414 MiB) |
+| SHA-256 | `6d4ba93180862605825ab6a3834b62575bf9a7d3360e595ca7a17dc4593586f7` |
+| **Slim** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v3.1-slim (52,661,195 B, sha256 `c146ccda…d0a7d`) |
 | Version | 3.1 (versionCode 22) · same signing key as v2.8–v3.0 |
 
 ## 📦 v3.0 — models pre-unpacked inside the APK (no bzip2 on the phone)
