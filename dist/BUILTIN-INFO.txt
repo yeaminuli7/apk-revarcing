@@ -1,9 +1,9 @@
-BalaSpeak v2.8 — built-in voices (all languages)
-built:  2026-11-12T15:46:45Z
-commit: 5aa4660c360126e3e5200cea86980d83d01e7da2
-asset:  BalaSpeak-v2.8-builtin-allvoices-arm64.apk
-size:   365571316 bytes (349M)
-sha256: ba829400873a40bd47334d3e2314d35ef222620519de6b29cc7217a51abe2616
+BalaSpeak v2.9 — built-in voices (all languages)
+built:  2026-11-13T01:59:52Z
+commit: 33bf3de96f237e0762b52a53ce3d494a23afcc5e
+asset:  BalaSpeak-v2.9-builtin-allvoices-arm64.apk
+size:   365571324 bytes (349M)
+sha256: 1acfb252b1ec3606659ac064868963aabd166eff878d6e8d45bde2be33344165
 signed: v1 + v2 + v3, stable keystore (keystore/balaspeak-release.p12)
 built without R8 minification (character voices stay intact)
 abi:    arm64-v8a (minSdk 24, targetSdk 36, versionCode 19)
