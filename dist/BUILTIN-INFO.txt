@@ -1,19 +1,27 @@
-BalaSpeak v2.9 — built-in voices (all languages)
-built:  2026-11-13T01:59:52Z
-commit: 33bf3de96f237e0762b52a53ce3d494a23afcc5e
-asset:  BalaSpeak-v2.9-builtin-allvoices-arm64.apk
-size:   365571324 bytes (349M)
-sha256: 1acfb252b1ec3606659ac064868963aabd166eff878d6e8d45bde2be33344165
+BalaSpeak v3.0 — built-in voices (all languages)
+built:  2026-11-13T08:28:43Z
+commit: 53e8db4f463036be1d223832c6e7a5571f1c888a
+asset:  BalaSpeak-v3.0-builtin-allvoices-arm64.apk
+size:   433527779 bytes (414M)
+sha256: d48d6950f0501c4a0a8cd041253b379b857880a0bcc6e49dbcf9e35e5787ead9
 signed: v1 + v2 + v3, stable keystore (keystore/balaspeak-release.p12)
 built without R8 minification (character voices stay intact)
-abi:    arm64-v8a (minSdk 24, targetSdk 36, versionCode 20)
-voices: English 31 characters (v2.9: now visible in the picker — reactive pack flow) (ages + monster/robot/ghost/...), Bangla 6, Hindi 6
-models: Bangla MMS 114 MB · Hindi Piper x3 60 MB · English Kokoro v1.0 132 MB
+abi:    arm64-v8a (minSdk 24, targetSdk 36, versionCode 21)
+voices: English 31 characters (ages + monster/robot/ghost/...), Bangla 6, Hindi 6
+layout: models are pre-unpacked in assets/tts/extracted/ (no bzip2 on the phone)
+        first launch copies the tree into filesDir (~1-2 min, one time)
 
-bundled assets:
+bundled voice files: 1456
+largest assets:
    114417798  assets/tts/bn/model.onnx
-         927  assets/tts/bn_vocab.json
-   132353410  assets/tts/en/kokoro-int8-multi-lang-v1_0.tar.bz2
-    20987965  assets/tts/hi/pratham/vits-piper-hi_IN-pratham-medium-int8.tar.bz2
-    21097319  assets/tts/hi/priyamvada/vits-piper-hi_IN-priyamvada-medium-int8.tar.bz2
-    21064499  assets/tts/hi/rohan/vits-piper-hi_IN-rohan-medium-int8.tar.bz2
+   114202993  assets/tts/extracted/en/model.int8.onnx
+    28200960  assets/tts/extracted/en/voices.bin
+    18575703  assets/tts/extracted/hi/priyamvada/hi_IN-priyamvada-medium.onnx
+    18575696  assets/tts/extracted/hi/pratham/hi_IN-pratham-medium.onnx
+    18301724  assets/tts/extracted/hi/rohan/hi_IN-rohan-medium.onnx
+     8532392  assets/tts/extracted/hi/rohan/espeak-ng-data/ru_dict
+     8532392  assets/tts/extracted/hi/priyamvada/espeak-ng-data/ru_dict
+     8532392  assets/tts/extracted/hi/pratham/espeak-ng-data/ru_dict
+     8532392  assets/tts/extracted/en/espeak-ng-data/ru_dict
+     6366635  assets/tts/extracted/en/lexicon-gb-en.txt
+     5998717  assets/tts/extracted/en/dict/idf.utf8
