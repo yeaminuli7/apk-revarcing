@@ -260,3 +260,28 @@ models (a minute or two)"* while the list is empty, instead of claiming no pack 
 initial commit while the working tree keeps its files; always `git fetch` +
 `git checkout -f -B <branch> origin/<branch>` before editing to avoid committing against a
 stale history.
+
+
+## 12. v3.0 — extraction moved to build time
+
+**Problem.** `ensurePacksInstalled()` copied each `.tar.bz2` from assets to `filesDir` and
+then ran bzip2 there (`extractTarBz2`). On a phone that means: 294 MB of archives written
+once, ~500 MB of temporary extraction traffic, several minutes of CPU, and a failure mode
+(no space / killed by the OS) that leaves a half-populated pack directory.
+
+**Change.** The extraction happens on the CI runner instead:
+
+* `scripts/prepare_builtin_assets.sh` downloads the archives, unpacks them into
+  `app/src/main/assets/tts/extracted/<lang>/` (hoisting the single top-level folder, exactly
+  like `flattenNestedArchiveDir()` does at runtime), asserts every file `isInstalledUncached()`
+  looks for, and then deletes the archives.
+* `NeuralVoiceManager` gained `preExtractedRoot = "tts/extracted"`, `assetDirExists()` and a
+  recursive `copyAssetTree()`. Both `ensurePacksInstalled()` and `downloadPack()` take the
+  copy path when the folder exists, and fall back to download+bzip2 otherwise (slim build).
+* `androidResources { noCompress += … }` keeps `.onnx`/`.bin`/`.txt`/`.json` stored, so the
+  first-launch copy is a byte-for-byte stream copy instead of an on-the-fly inflate.
+* CI verifies the APK contains the extracted tree, that *no* `.tar.bz2` remains, and counts
+  the bundled voice files.
+
+**Trade-off.** The APK grows (bz2 overhead removed, content uncompressed) but the device
+needs strictly less transient storage and the risky step disappears.

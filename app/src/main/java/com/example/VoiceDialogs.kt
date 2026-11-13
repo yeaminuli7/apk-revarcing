@@ -169,7 +169,7 @@ fun VoiceSelectionDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            "Preparing the voices…\nThe bundled voice models are unpacked on first launch (a minute or two). This list fills in by itself — you do not need to restart the app.\n\nIf it stays empty: Settings → 🎙️ AI Voice Packs shows the progress or the error.",
+                            "Preparing the voices…\nThe bundled voice models are copied into the app on first launch (a minute or two). This list fills in by itself — you do not need to restart the app.\n\nIf it stays empty: Settings → 🎙️ AI Voice Packs shows the progress or the error.",
                             textAlign = TextAlign.Center,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant

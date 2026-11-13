@@ -14,8 +14,8 @@ android {
     applicationId = "com.aistudio.balaspeak.ytwqzn"
     minSdk = 24
     targetSdk = 36
-    versionCode = 20
-    versionName = "2.9"
+    versionCode = 21
+    versionName = "3.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -24,6 +24,13 @@ android {
       // arm64-v8a = modern phones, x86_64 = emulator.
       abiFilters += listOf("arm64-v8a")
     }
+  }
+
+  androidResources {
+    // The built-in APK ships the voice models already unpacked. Storing them
+    // uncompressed keeps install-time/copy-time CPU down; they are int8 weights
+    // and barely compress anyway.
+    noCompress += listOf("onnx", "bin", "txt", "json", "fbin")
   }
 
   signingConfigs {

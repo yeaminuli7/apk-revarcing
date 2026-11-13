@@ -786,7 +786,7 @@ private fun BlockVoiceDialog(
                 }
                 if (filtered.isEmpty()) {
                     Text(
-                        "Preparing the voices… first launch unpacks the bundled models (a minute or two). This list fills in by itself.",
+                        "Preparing the voices… first launch copies the bundled models (a minute or two). This list fills in by itself.",
                         fontSize = 12.sp,
                         modifier = Modifier.padding(vertical = 8.dp)
                     )

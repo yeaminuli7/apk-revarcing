@@ -1,6 +1,11 @@
 # Install / signature troubleshooting
 
-**v2.9 is current** (`BalaSpeak-v2.9-builtin-allvoices-arm64.apk`, versionCode 20). It installs
+**v3.0 is current** — `BalaSpeak-v3.0-builtin-allvoices-arm64.apk` (versionCode 21). The models
+are already unpacked inside the APK, so the first launch only copies them (a minute or two);
+nothing is downloaded and nothing is unzipped on the phone. Same signing key as v2.8/v2.9, so it
+installs straight over them.
+
+**v2.9** (`BalaSpeak-v2.9-builtin-allvoices-arm64.apk`, versionCode 20). It installs
 over v2.8 without uninstalling — same key. The v2.8 commands below apply unchanged, just swap
 the version number.
 

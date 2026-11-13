@@ -48,6 +48,34 @@ If an older build signed with a different key is already installed, uninstall it
 A full source analysis and build report is in **[ANALYSIS.md](ANALYSIS.md)**.
 Which voice models are worth switching to in 2026 — **[docs/VOICE-MODELS-2026.md](docs/VOICE-MODELS-2026.md)**.
 
+## 📦 v3.0 — models pre-unpacked inside the APK (no bzip2 on the phone)
+
+v2.8/v2.9 shipped the models as `.tar.bz2` archives: on first launch the phone copied
+132 MB + 3×21 MB into its private folder and then spent minutes running bzip2, which is
+both slow and the most fragile step on low-storage devices. Now the archives are unpacked
+**on the build machine** and the APK carries the ready-made tree:
+
+```
+assets/tts/bn/model.onnx                      (plain file, as before)
+assets/tts/extracted/en/…                     Kokoro: model.int8.onnx, voices.bin,
+                                              tokens.txt, lexicon-*.txt, espeak-ng-data/
+assets/tts/extracted/hi/{pratham,rohan,priyamvada}/…
+```
+
+`NeuralVoiceManager.ensurePacksInstalled()` / `downloadPack()` check
+`assets/tts/extracted/<lang>` first and, when it exists, just **copy** that tree into
+`filesDir` — no download, no decompression, no temporary archive, so nothing can fail
+half-way. The slim build has no such folder and keeps the download+bzip2 path unchanged.
+`scripts/prepare_builtin_assets.sh` does the unpacking and deletes the archives, so the
+APK never carries the models twice.
+
+| | |
+|---|---|
+| **Built-in (all models inside)** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v3.0-builtin |
+| Asset | `BalaSpeak-v3.0-builtin-allvoices-arm64.apk` · versionCode 21 · versionName 3.0 |
+| **Slim (packs on demand)** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v3.0-slim |
+| Storage | APK is bigger (models uncompressed), but install + first launch need **less** total space than before: no 294 MB of archives, no second copy while unzipping |
+
 ## 🆕 v2.9 — the character voices are now selectable
 
 v2.8 shipped the 31 English characters inside the APK, but the picker stayed empty: the voice

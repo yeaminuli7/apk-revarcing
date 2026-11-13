@@ -179,6 +179,40 @@ class NeuralVoiceManager private constructor(context: Context) {
 
     fun packDir(langCode: String): File = File(appContext.filesDir, "tts/$langCode")
 
+    /**
+     * Builds that ship the models already unpacked put them here:
+     * assets/tts/extracted/<lang>/…  (see scripts/prepare_builtin_assets.sh).
+     * When that folder exists the phone only copies files — it never downloads
+     * and never runs bzip2.
+     */
+    private val preExtractedRoot = "tts/extracted"
+
+    private fun assetDirExists(assetPath: String): Boolean = try {
+        (appContext.assets.list(assetPath) ?: emptyArray()).isNotEmpty()
+    } catch (e: Exception) {
+        false
+    }
+
+    /** Recursively copies an asset directory into [destDir] (files keep their paths). */
+    private fun copyAssetTree(assetPath: String, destDir: File) {
+        val children = try {
+            appContext.assets.list(assetPath) ?: emptyArray()
+        } catch (e: Exception) {
+            emptyArray()
+        }
+        if (children.isEmpty()) {
+            destDir.parentFile?.mkdirs()
+            appContext.assets.open(assetPath).use { input ->
+                java.io.BufferedOutputStream(destDir.outputStream(), 1 shl 20).use { out ->
+                    input.copyTo(out, 1 shl 20)
+                }
+            }
+            return
+        }
+        destDir.mkdirs()
+        for (child in children) copyAssetTree("$assetPath/$child", File(destDir, child))
+    }
+
     private fun findFile(dir: File, name: String): File? =
         dir.walkTopDown().firstOrNull { it.isFile && it.name.equals(name, ignoreCase = true) }
 
@@ -199,34 +233,42 @@ class NeuralVoiceManager private constructor(context: Context) {
                         ortSessions.remove(pack.langCode)?.close()
                     }
                     dir.mkdirs()
-                    var done = 0L
-                    for (dl in pack.downloads) {
-                        val targetDir = if (dl.subDir.isBlank()) dir else File(dir, dl.subDir)
-                        targetDir.mkdirs()
-                        val isArchive = dl.assetPath.endsWith(".tar.bz2") || dl.url.endsWith(".tar.bz2")
-                        if (dl.assetPath.isNotEmpty()) {
-                            val archiveName = dl.assetPath.substringAfterLast('/')
-                            val archiveDest = File(targetDir, archiveName)
-                            copyAssetToFile(dl.assetPath, archiveDest)
-                            done += dl.bytes
-                            if (isArchive) {
-                                _states.value = _states.value + (pack.langCode to PackState.Extracting)
-                                extractTarBz2(archiveDest, targetDir)
-                                archiveDest.delete()
-                                flattenNestedArchiveDir(targetDir, ".onnx")
-                            }
-                        } else {
-                            val fileName = if (isArchive) "pack_${dl.subDir}.tar.bz2" else dl.url.substringAfterLast('/')
-                            downloadToFile(dl.url, File(targetDir, fileName), dl.bytes) { r, t ->
-                                _states.value = _states.value +
-                                    (pack.langCode to PackState.Downloading(done + r, pack.totalBytes))
-                            }
-                            done += dl.bytes
-                            if (isArchive) {
-                                _states.value = _states.value + (pack.langCode to PackState.Extracting)
-                                extractTarBz2(File(targetDir, fileName), targetDir)
-                                File(targetDir, fileName).delete()
-                                flattenNestedArchiveDir(targetDir, ".onnx")
+                    val preExtracted = "$preExtractedRoot/${pack.langCode}"
+                    if (assetDirExists(preExtracted)) {
+                        // Fully-offline build: the models are already unpacked in the APK.
+                        Log.i(TAG, "Copying pre-extracted models for ${pack.langCode} from assets")
+                        _states.value = _states.value + (pack.langCode to PackState.Extracting)
+                        copyAssetTree(preExtracted, dir)
+                    } else {
+                        var done = 0L
+                        for (dl in pack.downloads) {
+                            val targetDir = if (dl.subDir.isBlank()) dir else File(dir, dl.subDir)
+                            targetDir.mkdirs()
+                            val isArchive = dl.assetPath.endsWith(".tar.bz2") || dl.url.endsWith(".tar.bz2")
+                            if (dl.assetPath.isNotEmpty()) {
+                                val archiveName = dl.assetPath.substringAfterLast('/')
+                                val archiveDest = File(targetDir, archiveName)
+                                copyAssetToFile(dl.assetPath, archiveDest)
+                                done += dl.bytes
+                                if (isArchive) {
+                                    _states.value = _states.value + (pack.langCode to PackState.Extracting)
+                                    extractTarBz2(archiveDest, targetDir)
+                                    archiveDest.delete()
+                                    flattenNestedArchiveDir(targetDir, ".onnx")
+                                }
+                            } else {
+                                val fileName = if (isArchive) "pack_${dl.subDir}.tar.bz2" else dl.url.substringAfterLast('/')
+                                downloadToFile(dl.url, File(targetDir, fileName), dl.bytes) { r, t ->
+                                    _states.value = _states.value +
+                                        (pack.langCode to PackState.Downloading(done + r, pack.totalBytes))
+                                }
+                                done += dl.bytes
+                                if (isArchive) {
+                                    _states.value = _states.value + (pack.langCode to PackState.Extracting)
+                                    extractTarBz2(File(targetDir, fileName), targetDir)
+                                    File(targetDir, fileName).delete()
+                                    flattenNestedArchiveDir(targetDir, ".onnx")
+                                }
                             }
                         }
                     }
@@ -783,22 +825,29 @@ class NeuralVoiceManager private constructor(context: Context) {
                     ortSessions.remove(pack.langCode)?.close()
                 }
                 dir.mkdirs()
-                var done = 0L
-                for (dl in pack.downloads) {
-                    val targetDir = if (dl.subDir.isBlank()) dir else File(dir, dl.subDir)
-                    targetDir.mkdirs()
-                    val isArchive = dl.url.endsWith(".tar.bz2")
-                    val fileName = if (isArchive) "pack_${dl.subDir}.tar.bz2" else dl.url.substringAfterLast('/')
-                    downloadToFile(dl.url, File(targetDir, fileName), dl.bytes) { r, t ->
-                        _states.value = _states.value +
-                            (pack.langCode to PackState.Downloading(done + r, pack.totalBytes))
-                    }
-                    done += dl.bytes
-                    if (isArchive) {
-                        _states.value = _states.value + (pack.langCode to PackState.Extracting)
-                        extractTarBz2(File(targetDir, fileName), targetDir)
-                        File(targetDir, fileName).delete()
-                        flattenNestedArchiveDir(targetDir, ".onnx")
+                val preExtracted = "$preExtractedRoot/${pack.langCode}"
+                if (assetDirExists(preExtracted)) {
+                    // Built-in build: nothing to download, just copy the unpacked tree.
+                    _states.value = _states.value + (pack.langCode to PackState.Extracting)
+                    copyAssetTree(preExtracted, dir)
+                } else {
+                    var done = 0L
+                    for (dl in pack.downloads) {
+                        val targetDir = if (dl.subDir.isBlank()) dir else File(dir, dl.subDir)
+                        targetDir.mkdirs()
+                        val isArchive = dl.url.endsWith(".tar.bz2")
+                        val fileName = if (isArchive) "pack_${dl.subDir}.tar.bz2" else dl.url.substringAfterLast('/')
+                        downloadToFile(dl.url, File(targetDir, fileName), dl.bytes) { r, t ->
+                            _states.value = _states.value +
+                                (pack.langCode to PackState.Downloading(done + r, pack.totalBytes))
+                        }
+                        done += dl.bytes
+                        if (isArchive) {
+                            _states.value = _states.value + (pack.langCode to PackState.Extracting)
+                            extractTarBz2(File(targetDir, fileName), targetDir)
+                            File(targetDir, fileName).delete()
+                            flattenNestedArchiveDir(targetDir, ".onnx")
+                        }
                     }
                 }
                 if (!isInstalled(pack.langCode)) {
