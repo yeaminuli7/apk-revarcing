@@ -83,7 +83,15 @@ object VoiceCast {
         return "${role.english} · ${role.bangla}"
     }
 
-    fun voicesFor(neuralLangs: Set<String> = emptySet()): List<FriendlyVoice> {
+    /**
+     * @param langs every language that should be visible in the picker
+     * @param readyLangs the subset whose models are already on disk; the rest are
+     *        listed with `ready = false` so the user can see them being prepared.
+     */
+    fun voicesFor(
+        neuralLangs: Set<String> = emptySet(),
+        readyLangs: Set<String> = neuralLangs
+    ): List<FriendlyVoice> {
         val languages = neuralLangs
             .filter { it.isNotBlank() }
             .sortedWith(compareBy<String> { languageRank(it) }.thenBy { nativeName(it) })
@@ -102,7 +110,8 @@ object VoiceCast {
                         isSystemVoice = false,
                         systemVoice = null,
                         rolePitch = pitchFor(role, role.gender),
-                        roleRate = role.rate
+                        roleRate = role.rate,
+                        ready = lang in readyLangs
                     )
                 )
             }

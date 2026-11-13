@@ -69,6 +69,8 @@ class NeuralVoiceManager private constructor(context: Context) {
         object NotDownloaded : PackState()
         data class Downloading(val received: Long, val total: Long) : PackState()
         object Extracting : PackState()
+        /** Copying the models that are already unpacked inside the APK. */
+        data class Preparing(val copied: Int, val total: Int) : PackState()
         object Ready : PackState()
         data class Failed(val message: String) : PackState()
     }
@@ -169,10 +171,12 @@ class NeuralVoiceManager private constructor(context: Context) {
     )
 
     init {
-        scope.launch { ensurePacksInstalled() }
+        // Restore first, and merge instead of overwriting: provisioning may already
+        // be running on a background thread when this class is first touched.
         val restored = packs.filter { isInstalled(it.langCode) }
             .associate { it.langCode to PackState.Ready as PackState }
-        if (restored.isNotEmpty()) _states.value = restored
+        if (restored.isNotEmpty()) _states.value = _states.value + restored
+        scope.launch { ensurePacksInstalled() }
     }
 
     // ---------------------------------------------------------------- paths
@@ -193,8 +197,16 @@ class NeuralVoiceManager private constructor(context: Context) {
         false
     }
 
-    /** Recursively copies an asset directory into [destDir] (files keep their paths). */
-    private fun copyAssetTree(assetPath: String, destDir: File) {
+    /**
+     * Recursively copies an asset directory into [destDir] (files keep their paths)
+     * and reports how many files have been written so far.
+     */
+    private fun copyAssetTree(
+        assetPath: String,
+        destDir: File,
+        counter: IntArray = IntArray(1),
+        onCopied: ((Int) -> Unit)? = null
+    ) {
         val children = try {
             appContext.assets.list(assetPath) ?: emptyArray()
         } catch (e: Exception) {
@@ -207,10 +219,50 @@ class NeuralVoiceManager private constructor(context: Context) {
                     input.copyTo(out, 1 shl 20)
                 }
             }
+            counter[0] = counter[0] + 1
+            onCopied?.invoke(counter[0])
             return
         }
         destDir.mkdirs()
-        for (child in children) copyAssetTree("$assetPath/$child", File(destDir, child))
+        for (child in children) copyAssetTree("$assetPath/$child", File(destDir, child), counter, onCopied)
+    }
+
+    /** How many files an asset directory holds (used for the copy progress counter). */
+    private fun countAssetFiles(assetPath: String): Int {
+        val children = try {
+            appContext.assets.list(assetPath) ?: emptyArray()
+        } catch (e: Exception) {
+            emptyArray()
+        }
+        if (children.isEmpty()) return 1
+        var n = 0
+        for (child in children) n += countAssetFiles("$assetPath/$child")
+        return n
+    }
+
+    /**
+     * Copies a pack that ships already unpacked in the APK. Checks free storage
+     * first (a 414 MB bundle needs room for its copy) and streams progress into
+     * [states] so the UI shows "copying 320/1456" instead of an endless spinner.
+     */
+    private fun copyBundledPack(pack: Pack, assetPath: String, dir: File) {
+        val need = (pack.totalBytes * 1.35).toLong()
+        val free = appContext.filesDir.usableSpace
+        if (free in 1L until need) {
+            throw IllegalStateException(
+                "স্টোরেজ কম — দরকার ~${need / 1_048_576} MB, ফাঁকা আছে ${free / 1_048_576} MB"
+            )
+        }
+        val total = countAssetFiles(assetPath)
+        _states.value = _states.value + (pack.langCode to PackState.Preparing(0, total))
+        var lastReported = 0
+        copyAssetTree(assetPath, dir) { copied ->
+            if (copied - lastReported >= 40 || copied == total) {
+                lastReported = copied
+                _states.value = _states.value + (pack.langCode to PackState.Preparing(copied, total))
+            }
+        }
+        Log.i(TAG, "Copied $total bundled files for ${pack.langCode} → ${dir.absolutePath}")
     }
 
     private fun findFile(dir: File, name: String): File? =
@@ -237,8 +289,7 @@ class NeuralVoiceManager private constructor(context: Context) {
                     if (assetDirExists(preExtracted)) {
                         // Fully-offline build: the models are already unpacked in the APK.
                         Log.i(TAG, "Copying pre-extracted models for ${pack.langCode} from assets")
-                        _states.value = _states.value + (pack.langCode to PackState.Extracting)
-                        copyAssetTree(preExtracted, dir)
+                        copyBundledPack(pack, preExtracted, dir)
                     } else {
                         var done = 0L
                         for (dl in pack.downloads) {
@@ -292,7 +343,6 @@ class NeuralVoiceManager private constructor(context: Context) {
                     if (!ok) {
                         _lastError.value = _lastError.value +
                             (pack.langCode to "Engine warm-up failed — device may be low on memory")
-                        _states.value = _states.value + (pack.langCode to PackState.Failed("engine warm-up failed"))
                     }
                 }
             } catch (e: Exception) {
@@ -346,8 +396,111 @@ class NeuralVoiceManager private constructor(context: Context) {
         .map { packs.map { it.langCode }.filter { isReady(it) }.toSet() }
         .stateIn(scope, SharingStarted.Eagerly, readyLangs())
 
-    fun isReady(langCode: String): Boolean =
-        isInstalled(langCode) && _states.value[langCode] !is PackState.Failed
+    /**
+     * "Can this language speak?" — files on disk only. A failed engine warm-up is
+     * reported through [lastError] but must NOT remove the voices from the picker
+     * (that used to empty the whole cast after one OOM on a small phone).
+     */
+    fun isReady(langCode: String): Boolean = isInstalled(langCode)
+
+    // ------------------------------------------------------ asset inspection
+
+    private fun assetFileExists(assetPath: String): Boolean = try {
+        appContext.assets.open(assetPath).use { true }
+    } catch (e: Exception) {
+        false
+    }
+
+    /** True when this build carries the pack's models (unpacked folder or a single asset). */
+    fun hasBundledAsset(langCode: String): Boolean {
+        if (assetDirExists("$preExtractedRoot/$langCode")) return true
+        val pack = packs.firstOrNull { it.langCode == langCode } ?: return false
+        for (dl in pack.downloads) {
+            if (dl.assetPath.isNotEmpty() && assetFileExists(dl.assetPath)) return true
+        }
+        return false
+    }
+
+    /**
+     * Languages this installation can offer at all: already on disk or bundled in
+     * the APK. The picker uses this instead of [readyLangs] so the cast is visible
+     * from the first second, even while the models are still being copied.
+     */
+    fun shippedLangs(): Set<String> =
+        packs.map { it.langCode }.filter { isInstalled(it) || hasBundledAsset(it) }.toSet()
+
+    /** Where a pack's files come from, for the diagnostics panel. */
+    fun assetSource(langCode: String): String {
+        if (assetDirExists("$preExtractedRoot/$langCode")) return "bundled · assets/$preExtractedRoot/$langCode"
+        val pack = packs.firstOrNull { it.langCode == langCode } ?: return "unknown"
+        for (dl in pack.downloads) {
+            if (dl.assetPath.isNotEmpty() && assetFileExists(dl.assetPath)) return "bundled · assets/${dl.assetPath}"
+        }
+        return "download · ${pack.totalBytes / 1_048_576} MB"
+    }
+
+    /** (files, bytes) actually on disk for a language. */
+    fun diskUsage(langCode: String): Pair<Int, Long> {
+        val dir = packDir(langCode)
+        if (!dir.exists()) return 0 to 0L
+        var files = 0
+        var bytes = 0L
+        dir.walkTopDown().forEach { f ->
+            if (f.isFile) { files++; bytes += f.length() }
+        }
+        return files to bytes
+    }
+
+    /** Languages with a provisioning job in flight (one job per language, ever). */
+    private val provisioning = ConcurrentHashMap<String, Boolean>()
+
+    /** Wipes a language and provisions it again (Retry button / tap on a voice). */
+    fun retryProvisioning(langCode: String, force: Boolean = false) {
+        val pack = packs.firstOrNull { it.langCode == langCode } ?: return
+        if (isInstalled(langCode) && !force) return
+        if (provisioning.putIfAbsent(langCode, true) != null) return
+        scope.launch {
+            try {
+                sherpaEngines.keys.filter { it == langCode || it.startsWith("$langCode:") }
+                    .forEach { sherpaEngines.remove(it)?.release() }
+                ortSessions.remove(langCode)?.close()
+                installedCache.remove(langCode)
+                _lastError.value = _lastError.value - langCode
+                _states.value = _states.value + (langCode to PackState.NotDownloaded)
+                downloadPack(pack)
+            } catch (e: Exception) {
+                Log.e(TAG, "Retry failed for $langCode: ${e.message}", e)
+                _lastError.value = _lastError.value + (langCode to (e.message ?: "retry failed"))
+            } finally {
+                provisioning.remove(langCode)
+            }
+        }
+    }
+
+    /** Synthesises one sentence and reports what happened — the in-app smoke test. */
+    suspend fun selfTest(langCode: String): String = withContext(Dispatchers.Default) {
+        if (!isInstalled(langCode)) {
+            return@withContext "❌ ${langCode.uppercase()}: files missing — " + filesStatus(langCode)
+        }
+        val started = System.currentTimeMillis()
+        val out = File(appContext.cacheDir, "selftest_$langCode.wav")
+        val ok = try {
+            synthesizeToFileBlocking(
+                "Hello. This is a voice test.", "cast:young_male:$langCode", langCode, 1f, 1f, out
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "selftest failed: ${e.message}", e)
+            false
+        }
+        val ms = System.currentTimeMillis() - started
+        val kb = if (out.exists()) out.length() / 1024 else 0L
+        out.delete()
+        if (ok && kb > 0) {
+            "✅ ${langCode.uppercase()} OK — ${ms}ms, ${kb}KB audio"
+        } else {
+            "❌ ${langCode.uppercase()} failed — ${_lastError.value[langCode] ?: "engine returned no audio"}"
+        }
+    }
 
     /** Human-readable list of what is missing from an installed pack. */
     fun filesStatus(langCode: String): String {
@@ -828,8 +981,7 @@ class NeuralVoiceManager private constructor(context: Context) {
                 val preExtracted = "$preExtractedRoot/${pack.langCode}"
                 if (assetDirExists(preExtracted)) {
                     // Built-in build: nothing to download, just copy the unpacked tree.
-                    _states.value = _states.value + (pack.langCode to PackState.Extracting)
-                    copyAssetTree(preExtracted, dir)
+                    copyBundledPack(pack, preExtracted, dir)
                 } else {
                     var done = 0L
                     for (dl in pack.downloads) {
@@ -872,7 +1024,6 @@ class NeuralVoiceManager private constructor(context: Context) {
                 if (!ok) {
                     _lastError.value = _lastError.value +
                         (pack.langCode to "Engine warm-up failed — device may be low on memory")
-                    _states.value = _states.value + (pack.langCode to PackState.Failed("engine warm-up failed"))
                 }
             }
         } catch (e: Exception) {

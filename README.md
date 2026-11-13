@@ -48,6 +48,35 @@ If an older build signed with a different key is already installed, uninstall it
 A full source analysis and build report is in **[ANALYSIS.md](ANALYSIS.md)**.
 Which voice models are worth switching to in 2026 — **[docs/VOICE-MODELS-2026.md](docs/VOICE-MODELS-2026.md)**.
 
+## 🔧 v3.1 — the picker can no longer be empty, and the app explains itself
+
+v3.0 unbundled the bzip2 step, but three things could still leave the voice list empty
+or the app silent with no explanation. All three are fixed:
+
+1. **A failed engine warm-up erased the whole cast.** `isReady()` was
+   `isInstalled() && state !is Failed`; the automatic warm-up after provisioning sets
+   `Failed` when a small phone runs out of memory, which removed **all 31 English
+   characters** from the picker. Readiness now depends on the files only — a warm-up
+   problem is shown as a warning, never as a missing voice.
+2. **The list only contained *ready* languages.** Now every language the APK ships
+   (`assets/tts/extracted/<lang>` or a bundled model file) is listed immediately, with a
+   "⏳ মডেল কপি হচ্ছে" badge until its files land. Voices exist from the first frame.
+3. **Provisioning could fail silently.** Copying now checks free storage first, reports
+   `Preparing(copied, total)` progress, is single-flight per language, and can be
+   restarted from the UI — including by simply tapping a voice, which now triggers the
+   copy instead of doing nothing.
+
+**Settings → 🎙️ AI Voice Packs** is now a diagnostics panel: per language it shows state,
+`n ফাইল / x MB` on disk, where the files come from (bundled vs download), the exact pack
+path, the missing-file list, the last error, plus **এখনই কপি করুন** (re-provision) and
+**টেস্ট** (synthesise one sentence and report `✅ ms/KB` or `❌ reason`).
+
+| | |
+|---|---|
+| **Built-in** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v3.1-builtin |
+| **Slim** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v3.1-slim |
+| Version | 3.1 (versionCode 22) · same signing key as v2.8–v3.0 |
+
 ## 📦 v3.0 — models pre-unpacked inside the APK (no bzip2 on the phone)
 
 v2.8/v2.9 shipped the models as `.tar.bz2` archives: on first launch the phone copied

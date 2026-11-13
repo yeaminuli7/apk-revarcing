@@ -285,3 +285,49 @@ once, ~500 MB of temporary extraction traffic, several minutes of CPU, and a fai
 
 **Trade-off.** The APK grows (bz2 overhead removed, content uncompressed) but the device
 needs strictly less transient storage and the risky step disappears.
+
+
+## 13. v3.1 — three ways the picker could still be empty
+
+`friendlyVoicesList` was made reactive in v2.9, and v3.0 removed the on-device bzip2.
+Neither guaranteed that a voice is *visible*, because visibility still depended on
+`isReady(lang)`, which had two failure modes and no way to tell the user what happened.
+
+### 13.1 Warm-up failure deleted the cast
+
+```kotlin
+// v2.9/v3.0
+fun isReady(lang) = isInstalled(lang) && _states.value[lang] !is PackState.Failed
+```
+
+After provisioning, `ensurePacksInstalled()` launches `synthesizeToFileBlocking("Hello.")`
+to warm the engine. Loading Kokoro (114 MB int8 + 28 MB voices) on a low-RAM device can
+fail; the catch handler then did `_states[lang] = Failed("engine warm-up failed")` — and
+because `isReady` filtered on `Failed`, **every English character disappeared** from the
+picker while the files sat on disk, fully usable. Fix: readiness is a disk question.
+
+### 13.2 The picker only listed ready languages
+
+`voicesFor(readyLangs())` means the list is empty whenever provisioning has not finished —
+i.e. exactly during the one or two minutes after the first launch. The list now comes from
+`shippedLangs()` (installed **or** bundled in the APK) and each entry carries
+`ready: Boolean`, rendered as a "⏳" badge; the cast is a property of the build.
+
+### 13.3 Failures were invisible
+
+The copy path had no progress, no space check and no retry: a phone with 500 MB free simply
+streamed `Failed` into a place the user could not see. v3.1 adds
+
+* `copyBundledPack()` — free-space pre-check with a Bangla message, `Preparing(copied, total)`
+  progress streamed into `states`, per-language single-flight guard;
+* `retryProvisioning(lang, force)` — wired to a button **and** to tapping a not-yet-ready
+  voice, so a failed copy is one tap away from healing;
+* `diskUsage()`, `assetSource()`, `filesStatus()`, `selfTest()` — surfaced in
+  `NeuralVoicePackDialog`, which now answers "why is there no voice?" on screen
+  (files on disk, source, path, missing files, last error, live synthesis test).
+
+### 13.4 What this means for diagnosis
+
+If the app still misbehaves, the dialog now names the reason: storage, a missing file, an
+engine error, or a synthesis failure with the engine's own message. That is testable
+without a logcat.

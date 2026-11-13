@@ -15,7 +15,7 @@ concurrency:
 jobs:
   # ---------------------------------------------------------------------------
   # Slim APK (~50 MB): app only, neural models downloaded on demand.
-  # Published to dist/ on the branch and to the v3.0-slim release
+  # Published to dist/ on the branch and to the v3.1-slim release
   # (release + debug build, both signed with the committed stable key).
   # ---------------------------------------------------------------------------
   build:
@@ -95,15 +95,15 @@ jobs:
           set -e
           mkdir -p dist staging
           rm -f dist/*.apk || true
-          cp app/build/outputs/apk/debug/app-debug.apk staging/BalaSpeak-v3.0-debug-arm64.apk
-          cp app/build/outputs/apk/release/app-release.apk staging/BalaSpeak-v3.0-release-arm64.apk
-          cp staging/BalaSpeak-v3.0-release-arm64.apk dist/
+          cp app/build/outputs/apk/debug/app-debug.apk staging/BalaSpeak-v3.1-debug-arm64.apk
+          cp app/build/outputs/apk/release/app-release.apk staging/BalaSpeak-v3.1-release-arm64.apk
+          cp staging/BalaSpeak-v3.1-release-arm64.apk dist/
           ls -lh staging dist
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: BalaSpeak-v3.0-apk
+          name: BalaSpeak-v3.1-apk
           path: staging/*.apk
           if-no-files-found: error
           compression-level: 0
@@ -113,7 +113,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
-          TAG=v3.0-slim
+          TAG=v3.1-slim
           NOTES=/tmp/notes-slim.md
           cat > "$NOTES" <<'NOTES_EOF'
           Slim build: the app only. Neural voice packs are downloaded inside the app
@@ -121,8 +121,8 @@ jobs:
 
           Two assets, same signature, pick one:
 
-          - `BalaSpeak-v3.0-release-arm64.apk` - 50 MB, R8-minified. **Use this one.**
-          - `BalaSpeak-v3.0-debug-arm64.apk` - 70 MB, not minified. Use it if the release
+          - `BalaSpeak-v3.1-release-arm64.apk` - 50 MB, R8-minified. **Use this one.**
+          - `BalaSpeak-v3.1-debug-arm64.apk` - 70 MB, not minified. Use it if the release
             build misbehaves; it behaves identically but is slower and larger.
 
           **If installation fails:** uninstall any older BalaSpeak build first (previous
@@ -135,7 +135,7 @@ jobs:
             gh release edit "$TAG" --notes-file "$NOTES"
           else
             gh release create "$TAG" staging/*.apk \
-              --title "BalaSpeak v3.0 - slim APK (arm64)" --notes-file "$NOTES"
+              --title "BalaSpeak v3.1 - slim APK (arm64)" --notes-file "$NOTES"
           fi
 
       - name: Publish APK to branch (dist/)
@@ -145,7 +145,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -f dist
           if git diff --cached --quiet; then echo "no changes"; exit 0; fi
-          git commit -m "ci: BalaSpeak v3.0 arm64 APK [skip ci]"
+          git commit -m "ci: BalaSpeak v3.1 arm64 APK [skip ci]"
           git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || true
           git push origin "HEAD:${GITHUB_REF_NAME}"
 
@@ -254,26 +254,26 @@ jobs:
         run: |
           set -e
           mkdir -p out dist
-          cp app/build/outputs/apk/release/app-release.apk out/BalaSpeak-v3.0-builtin-allvoices-arm64.apk
-          SIZE=$(stat -c %s out/BalaSpeak-v3.0-builtin-allvoices-arm64.apk)
-          SHA=$(sha256sum out/BalaSpeak-v3.0-builtin-allvoices-arm64.apk | cut -d' ' -f1)
+          cp app/build/outputs/apk/release/app-release.apk out/BalaSpeak-v3.1-builtin-allvoices-arm64.apk
+          SIZE=$(stat -c %s out/BalaSpeak-v3.1-builtin-allvoices-arm64.apk)
+          SHA=$(sha256sum out/BalaSpeak-v3.1-builtin-allvoices-arm64.apk | cut -d' ' -f1)
           {
-            echo "BalaSpeak v3.0 — built-in voices (all languages)"
+            echo "BalaSpeak v3.1 — built-in voices (all languages)"
             echo "built:  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "commit: ${GITHUB_SHA}"
-            echo "asset:  BalaSpeak-v3.0-builtin-allvoices-arm64.apk"
+            echo "asset:  BalaSpeak-v3.1-builtin-allvoices-arm64.apk"
             echo "size:   ${SIZE} bytes ($(numfmt --to=iec "$SIZE"))"
             echo "sha256: ${SHA}"
             echo "signed: v1 + v2 + v3, stable keystore (keystore/balaspeak-release.p12)"
             echo "built without R8 minification (character voices stay intact)"
-            echo "abi:    arm64-v8a (minSdk 24, targetSdk 36, versionCode 21)"
+            echo "abi:    arm64-v8a (minSdk 24, targetSdk 36, versionCode 22)"
             echo "voices: English 31 characters (ages + monster/robot/ghost/...), Bangla 6, Hindi 6"
             echo "layout: models are pre-unpacked in assets/tts/extracted/ (no bzip2 on the phone)"
             echo "        first launch copies the tree into filesDir (~1-2 min, one time)"
             echo
-            echo "bundled voice files: $(unzip -l out/BalaSpeak-v3.0-builtin-allvoices-arm64.apk | grep -c ' assets/tts/')"
+            echo "bundled voice files: $(unzip -l out/BalaSpeak-v3.1-builtin-allvoices-arm64.apk | grep -c ' assets/tts/')"
             echo "largest assets:"
-            unzip -l out/BalaSpeak-v3.0-builtin-allvoices-arm64.apk | grep ' assets/tts/' \
+            unzip -l out/BalaSpeak-v3.1-builtin-allvoices-arm64.apk | grep ' assets/tts/' \
               | sort -rn | head -12 | awk '{printf "  %10s  %s\n", $1, $4}'
           } > dist/BUILTIN-INFO.txt
           cat dist/BUILTIN-INFO.txt
@@ -283,20 +283,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
-          TAG="v3.0-builtin"
-          ASSET=out/BalaSpeak-v3.0-builtin-allvoices-arm64.apk
+          TAG="v3.1-builtin"
+          ASSET=out/BalaSpeak-v3.1-builtin-allvoices-arm64.apk
           cat > /tmp/notes.md <<'NOTES_EOF'
           Fully offline build: every neural voice model is inside the APK. Nothing is
           downloaded on first run, and the Android system TTS engine is never used.
 
-          **Install:** download `BalaSpeak-v3.0-builtin-allvoices-arm64.apk`, copy it to the
+          **Install:** download `BalaSpeak-v3.1-builtin-allvoices-arm64.apk`, copy it to the
           phone, tap it, allow install from unknown sources. Requires Android 7.0+ (arm64)
           and about 800 MB free storage (the APK plus the one-time copy of its models).
           The models are already unpacked inside the APK: the first launch only copies
           them into the app's private folder (a minute or two), it never unzips anything.
 
           **Upgrading from v2.7:** v2.7 builds were signed with a throwaway key, so uninstall
-          the old app first. From v3.0 on, the signature is stable and updates install over
+          the old app first. From v3.1 on, the signature is stable and updates install over
           each other.
 
           **English voices:** 31 characters — baby, toddler, child, teen, young adult,
@@ -314,7 +314,7 @@ jobs:
             gh release edit "$TAG" --notes-file /tmp/notes.md
           else
             gh release create "$TAG" "$ASSET" \
-              --title "BalaSpeak v3.0 — built-in voices + 31 English characters" \
+              --title "BalaSpeak v3.1 — built-in voices + 31 English characters" \
               --notes-file /tmp/notes.md
           fi
           gh release view "$TAG" --json tagName,assets

@@ -46,7 +46,9 @@ data class FriendlyVoice(
     val isSystemVoice: Boolean = false,
     val systemVoice: android.speech.tts.Voice? = null,
     val rolePitch: Float = 1f,
-    val roleRate: Float = 1f
+    val roleRate: Float = 1f,
+    /** false = listed but its models are still being copied on first launch. */
+    val ready: Boolean = true
 )
 
 class TextToSpeechManager(private val context: Context) {
@@ -125,15 +127,18 @@ class TextToSpeechManager(private val context: Context) {
     }
 
     fun getFriendlyVoicesList(): List<FriendlyVoice> {
-        return VoiceCast.voicesFor(neuralVoices.readyLangs())
+        val ready = neuralVoices.readyLangs()
+        return VoiceCast.voicesFor(neuralVoices.shippedLangs() + ready, ready)
     }
 
     /**
-     * Live voice list: grows as voice packs finish unpacking/installing.
-     * (The old one-shot snapshot left the picker empty on first launch.)
+     * Live voice list. Every language the installation *ships* is listed from the
+     * first frame (marked "preparing" until its files are on disk), and each pack
+     * that finishes copying re-emits the list. This is why the picker can no longer
+     * look empty: the cast is a property of the APK, not of the provisioning state.
      */
     val voicesFlow: StateFlow<List<FriendlyVoice>> = neuralVoices.readyLangsFlow
-        .map { VoiceCast.voicesFor(it) }
+        .map { ready -> VoiceCast.voicesFor(neuralVoices.shippedLangs() + ready, ready) }
         .stateIn(coroutineScope, SharingStarted.Eagerly, getFriendlyVoicesList())
 
     fun previewVoice(voice: FriendlyVoice?, speed: Float = _speed.value, pitch: Float = _pitch.value) {
@@ -146,6 +151,11 @@ class TextToSpeechManager(private val context: Context) {
                 neural.previewAsync(lang, role, speed, pitch)
                 return
             }
+            // Models not on disk yet: tapping a voice starts provisioning it, so the
+            // user never taps a character and gets silence for no reason.
+            neural.retryProvisioning(lang)
+            _previewingVoiceId.value = lang
+            return
         }
         _previewingVoiceId.value = null
     }

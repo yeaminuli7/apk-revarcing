@@ -213,6 +213,13 @@ fun VoiceSelectionDialog(
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.primary
                                         )
+                                        if (!voice.ready) {
+                                            Text(
+                                                "⏳ মডেল কপি হচ্ছে — প্রথমবার এক-দুই মিনিট",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.error
+                                            )
+                                        }
                                     }
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         if (viewModel != null) {

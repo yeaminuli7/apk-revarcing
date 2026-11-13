@@ -772,7 +772,12 @@ private fun BlockVoiceDialog(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(voice.displayName, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                    Text(voice.languageGroup, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                                    Text(
+                                        voice.languageGroup + if (voice.ready) "" else " · ⏳ কপি হচ্ছে…",
+                                        fontSize = 11.sp,
+                                        color = if (voice.ready) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.error
+                                    )
                                 }
                                 IconButton(onClick = { onPreview(voice) }) {
                                     Icon(Icons.Rounded.VolumeUp, contentDescription = "Audition", modifier = Modifier.size(18.dp))
