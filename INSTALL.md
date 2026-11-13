@@ -84,6 +84,8 @@ voice plays. The slim APK needs only ~50 MB plus whatever packs you download in 
 
 | Release | Asset | Size | When |
 |---|---|---|---|
-| `v2.8-builtin` | `BalaSpeak-v2.8-builtin-allvoices-arm64.apk` | 349 MB | Want all voices offline, no downloads |
+| `v3.0-builtin` | `BalaSpeak-v3.0-builtin-allvoices-arm64.apk` | 414 MB | **Current.** All voices offline, models already unpacked |
+| `v3.0-slim` | `BalaSpeak-v3.0-release-arm64.apk` | ~53 MB | Small app, packs downloaded on demand |
+| `v2.8-builtin` | `BalaSpeak-v2.8-builtin-allvoices-arm64.apk` | 349 MB | Older build (extracts archives on the phone) |
 | `v2.8-slim` | `BalaSpeak-v2.8-release-arm64.apk` | ~50 MB | Want a small app, download packs on demand |
 | `v2.8-slim` | `BalaSpeak-v2.8-debug-arm64.apk` | ~70 MB | Troubleshooting a crash |

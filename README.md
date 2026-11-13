@@ -72,8 +72,11 @@ APK never carries the models twice.
 | | |
 |---|---|
 | **Built-in (all models inside)** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v3.0-builtin |
-| Asset | `BalaSpeak-v3.0-builtin-allvoices-arm64.apk` · versionCode 21 · versionName 3.0 |
+| Asset | `BalaSpeak-v3.0-builtin-allvoices-arm64.apk` — 433,527,779 B (414 MiB) · versionCode 21 |
+| SHA-256 | `d48d6950f0501c4a0a8cd041253b379b857880a0bcc6e49dbcf9e35e5787ead9` |
+| Bundle | 1,456 voice files · **no `.tar.bz2` inside** (CI asserts it) |
 | **Slim (packs on demand)** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v3.0-slim |
+| Slim asset | `BalaSpeak-v3.0-release-arm64.apk` — 52,661,185 B, sha256 `65ffcd36…a1416` |
 | Storage | APK is bigger (models uncompressed), but install + first launch need **less** total space than before: no 294 MB of archives, no second copy while unzipping |
 
 ## 🆕 v2.9 — the character voices are now selectable
