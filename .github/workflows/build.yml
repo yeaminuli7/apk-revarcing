@@ -254,7 +254,7 @@ jobs:
             echo "sha256: ${SHA}"
             echo "signed: v1 + v2 + v3, stable keystore (keystore/balaspeak-release.p12)"
             echo "built without R8 minification (character voices stay intact)"
-            echo "abi:    arm64-v8a (minSdk 24, targetSdk 36, versionCode 19)"
+            echo "abi:    arm64-v8a (minSdk 24, targetSdk 36, versionCode 20)"
             echo "voices: English 31 characters (ages + monster/robot/ghost/...), Bangla 6, Hindi 6"
             echo "models: Bangla MMS 114 MB · Hindi Piper x3 60 MB · English Kokoro v1.0 132 MB"
             echo

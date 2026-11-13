@@ -6,8 +6,8 @@ size:   365571324 bytes (349M)
 sha256: 1acfb252b1ec3606659ac064868963aabd166eff878d6e8d45bde2be33344165
 signed: v1 + v2 + v3, stable keystore (keystore/balaspeak-release.p12)
 built without R8 minification (character voices stay intact)
-abi:    arm64-v8a (minSdk 24, targetSdk 36, versionCode 19)
-voices: English 31 characters (ages + monster/robot/ghost/...), Bangla 6, Hindi 6
+abi:    arm64-v8a (minSdk 24, targetSdk 36, versionCode 20)
+voices: English 31 characters (v2.9: now visible in the picker — reactive pack flow) (ages + monster/robot/ghost/...), Bangla 6, Hindi 6
 models: Bangla MMS 114 MB · Hindi Piper x3 60 MB · English Kokoro v1.0 132 MB
 
 bundled assets:
