@@ -99,7 +99,7 @@ fun VoiceSelectionDialog(
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            "Six people per language. The phone's best voice is shaped so they do not all sound the same.",
+                            "English: 31 characters (all ages + monster, robot, ghost…) · Bangla & Hindi: 6 personas each.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -169,7 +169,7 @@ fun VoiceSelectionDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            "No voice pack for this language.\nInstall a high-quality voice, then come back.",
+                            "Preparing the voices…\nThe bundled voice models are unpacked on first launch (a minute or two). This list fills in by itself — you do not need to restart the app.\n\nIf it stays empty: Settings → 🎙️ AI Voice Packs shows the progress or the error.",
                             textAlign = TextAlign.Center,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant

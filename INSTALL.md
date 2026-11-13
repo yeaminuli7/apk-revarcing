@@ -1,5 +1,9 @@
 # Install / signature troubleshooting
 
+**v2.9 is current** (`BalaSpeak-v2.9-builtin-allvoices-arm64.apk`, versionCode 20). It installs
+over v2.8 without uninstalling — same key. The v2.8 commands below apply unchanged, just swap
+the version number.
+
 Every APK published from this repository since **v2.8** is signed with the same stable
 sideload key, with **v1 + v2 + v3** signature schemes:
 

@@ -48,6 +48,25 @@ If an older build signed with a different key is already installed, uninstall it
 A full source analysis and build report is in **[ANALYSIS.md](ANALYSIS.md)**.
 Which voice models are worth switching to in 2026 — **[docs/VOICE-MODELS-2026.md](docs/VOICE-MODELS-2026.md)**.
 
+## 🆕 v2.9 — the character voices are now selectable
+
+v2.8 shipped the 31 English characters inside the APK, but the picker stayed empty: the voice
+list was a **one-shot snapshot** taken in the ViewModel constructor (`getFriendlyVoicesList()`),
+while the bundled models are unpacked **asynchronously** on first launch. v2.9 makes the list
+reactive, so it fills itself in as packs become ready:
+
+| | |
+|---|---|
+| **Built-in (all models inside)** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v2.9-builtin |
+| Asset | `BalaSpeak-v2.9-builtin-allvoices-arm64.apk` · versionCode 20 |
+| **Slim (packs on demand)** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v2.9-slim |
+| Asset | `BalaSpeak-v2.9-release-arm64.apk` (+ unminified `debug`) |
+
+What changed in code: `NeuralVoiceManager.readyLangsFlow` (StateFlow derived from the pack
+states) → `TextToSpeechManager.voicesFlow` → `DocumentViewModel.friendlyVoicesList`. The picker
+now says *"Preparing the voices…"* while the first-launch unpack runs instead of pretending no
+packs exist. Updates install straight over v2.8 — same signing key.
+
 ## 🎙️ Built-in voices APK v2.8 (all models inside, fully offline)
 
 **Download:** https://github.com/yeaminuli7/apk-revarcing/releases/tag/v2.8-builtin

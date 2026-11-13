@@ -392,9 +392,9 @@ class DocumentViewModel(application: Application) : AndroidViewModel(application
     val restoredSessionBanner: StateFlow<MediaTaskHistory?> = _restoredSessionBanner.asStateFlow()
 
     val speechState: StateFlow<SpeechState> = ttsManager.speechState
-    val friendlyVoicesList: StateFlow<List<FriendlyVoice>> = MutableStateFlow(
-        ttsManager.getFriendlyVoicesList()
-    ).asStateFlow()
+    // Live list — repopulates by itself when the bundled/ downloaded packs
+    // finish installing, instead of freezing whatever existed at startup.
+    val friendlyVoicesList: StateFlow<List<FriendlyVoice>> = ttsManager.voicesFlow
 
     val previewingVoiceId: StateFlow<String?> = ttsManager.previewingVoiceId
 

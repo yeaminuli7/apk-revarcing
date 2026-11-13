@@ -8,8 +8,11 @@ import com.example.tts.neural.NeuralVoiceManager
 import com.example.tts.neural.PersonaSpec
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import java.io.File
 import java.io.FileInputStream
 import java.io.RandomAccessFile
@@ -124,6 +127,14 @@ class TextToSpeechManager(private val context: Context) {
     fun getFriendlyVoicesList(): List<FriendlyVoice> {
         return VoiceCast.voicesFor(neuralVoices.readyLangs())
     }
+
+    /**
+     * Live voice list: grows as voice packs finish unpacking/installing.
+     * (The old one-shot snapshot left the picker empty on first launch.)
+     */
+    val voicesFlow: StateFlow<List<FriendlyVoice>> = neuralVoices.readyLangsFlow
+        .map { VoiceCast.voicesFor(it) }
+        .stateIn(coroutineScope, SharingStarted.Eagerly, getFriendlyVoicesList())
 
     fun previewVoice(voice: FriendlyVoice?, speed: Float = _speed.value, pitch: Float = _pitch.value) {
         val neural = NeuralVoiceManager.get(context)

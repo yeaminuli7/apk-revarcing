@@ -732,7 +732,7 @@ private fun BlockVoiceDialog(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Who is speaking?", fontWeight = FontWeight.Bold)
-                        Text("Six people in each language. Tap the speaker to hear them.", fontSize = 11.sp)
+                        Text("English: 31 characters · Bangla & Hindi: 6 each. Tap 🔊 to hear one.", fontSize = 11.sp)
                     }
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.Default.Close, contentDescription = "Close")
@@ -786,7 +786,7 @@ private fun BlockVoiceDialog(
                 }
                 if (filtered.isEmpty()) {
                     Text(
-                        "No voice pack for this language. Install a high-quality voice, then reopen.",
+                        "Preparing the voices… first launch unpacks the bundled models (a minute or two). This list fills in by itself.",
                         fontSize = 12.sp,
                         modifier = Modifier.padding(vertical = 8.dp)
                     )

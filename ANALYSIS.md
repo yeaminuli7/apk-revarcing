@@ -210,3 +210,53 @@ sha256 `ba8294…babe2616`, v1+v2+v3 signed, all five model files verified insid
 * **First-run size** — voice packs add ~114 MB (bn), ~60 MB (hi) or ~132 MB (en) of downloads.
 * **Language of the UI/docs** is Bengali; string resources are minimal (`app_name` only),
   so localisation would be a refactor, not a translation job.
+
+
+## 11. v2.9 — why the new voices were invisible (and the fix)
+
+**Symptom.** v2.8 contained 31 English characters, yet the speaker picker listed none of them.
+
+**Root cause.** The list was computed once, eagerly:
+
+```kotlin
+// DocumentViewModel (v2.8) — frozen at construction time
+val friendlyVoicesList: StateFlow<List<FriendlyVoice>> = MutableStateFlow(
+    ttsManager.getFriendlyVoicesList()   // VoiceCast.voicesFor(neuralVoices.readyLangs())
+).asStateFlow()
+```
+
+`readyLangs()` only returns languages whose packs pass `isReady()` → `isInstalled()` (a disk
+check). On the built-in APK those packs do not exist until `ensurePacksInstalled()` has copied
+and untarred ~294 MB from assets — which runs in the background *after* the ViewModel is built.
+So the snapshot was empty (or partial), the picker rendered "No voice pack for this language",
+and nothing ever recomputed it. The same snapshot fed the per-block voice picker in
+`DubberV2Screen`.
+
+**Fix.** Make the dependency reactive:
+
+```kotlin
+// NeuralVoiceManager
+val readyLangsFlow: StateFlow<Set<String>> = _states
+    .map { packs.map { it.langCode }.filter { isReady(it) }.toSet() }
+    .stateIn(scope, SharingStarted.Eagerly, readyLangs())
+
+// TextToSpeechManager
+val voicesFlow: StateFlow<List<FriendlyVoice>> = neuralVoices.readyLangsFlow
+    .map { VoiceCast.voicesFor(it) }
+    .stateIn(coroutineScope, SharingStarted.Eagerly, getFriendlyVoicesList())
+
+// DocumentViewModel
+val friendlyVoicesList: StateFlow<List<FriendlyVoice>> = ttsManager.voicesFlow
+```
+
+`_states` is already written on every transition (`Downloading → Extracting → Ready`, `Failed`)
+and `installedCache` is invalidated on install/delete, so each pack that becomes usable
+re-emits and the cast grows: 31 English roles appear the moment the English pack is ready.
+
+**UI honesty.** Both pickers now show *"Preparing the voices… first launch unpacks the bundled
+models (a minute or two)"* while the list is empty, instead of claiming no pack exists.
+
+**Lost-work hazard (build environment).** The sandbox occasionally re-clones `.git` to the
+initial commit while the working tree keeps its files; always `git fetch` +
+`git checkout -f -B <branch> origin/<branch>` before editing to avoid committing against a
+stale history.

@@ -17,8 +17,11 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -291,6 +294,15 @@ class NeuralVoiceManager private constructor(context: Context) {
     }
 
     fun readyLangs(): Set<String> = packs.map { it.langCode }.filter { isReady(it) }.toSet()
+
+    /**
+     * The same set, as a flow. First launch unpacks ~294 MB of bundled models in
+     * the background, so the UI must react when a pack becomes usable instead of
+     * reading [readyLangs] once (that used to leave the voice picker empty).
+     */
+    val readyLangsFlow: StateFlow<Set<String>> = _states
+        .map { packs.map { it.langCode }.filter { isReady(it) }.toSet() }
+        .stateIn(scope, SharingStarted.Eagerly, readyLangs())
 
     fun isReady(langCode: String): Boolean =
         isInstalled(langCode) && _states.value[langCode] !is PackState.Failed
