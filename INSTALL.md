@@ -1,7 +1,7 @@
 # Install / signature troubleshooting
 
 **v3.0 is current** — `BalaSpeak-v3.0-builtin-allvoices-arm64.apk` (versionCode 21). The models
-are already unpacked inside the APK, so the first launch only copies them (a minute or two);
+are already unpacked inside the APK, so the first launch only copies them (a minute or two, ~414 MB, budget ~1 GB free space);
 nothing is downloaded and nothing is unzipped on the phone. Same signing key as v2.8/v2.9, so it
 installs straight over them.
 

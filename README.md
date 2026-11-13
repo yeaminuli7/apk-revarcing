@@ -77,7 +77,7 @@ APK never carries the models twice.
 | Bundle | 1,456 voice files · **no `.tar.bz2` inside** (CI asserts it) |
 | **Slim (packs on demand)** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v3.0-slim |
 | Slim asset | `BalaSpeak-v3.0-release-arm64.apk` — 52,661,185 B, sha256 `65ffcd36…a1416` |
-| Storage | APK is bigger (models uncompressed), but install + first launch need **less** total space than before: no 294 MB of archives, no second copy while unzipping |
+| Storage | APK is 414 MB (models uncompressed). Budget ~1 GB free for the install plus the one-time copy. Before, the phone additionally held 294 MB of archives and needed room to unzip them — that transient step is gone |
 
 ## 🆕 v2.9 — the character voices are now selectable
 
