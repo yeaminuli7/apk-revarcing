@@ -79,7 +79,9 @@ after writing 400+ MB was the main memory-pressure crash.
 | | |
 |---|---|
 | **Built-in** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v3.2-builtin |
-| **Slim** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v3.2-slim |
+| Asset | `BalaSpeak-v3.2-builtin-allvoices-arm64.apk` — 433,527,759 B (414 MiB) |
+| SHA-256 | `fcd3c016893970359d88532fe4958b5c351e4bd8752f533955f377a80a6e8bc8` |
+| **Slim** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v3.2-slim (52,677,567 B, sha256 `e5ea41f5…8725e`) |
 | Version | 3.2 (versionCode 23) · same key as v2.8–v3.1 |
 
 ## 🔧 v3.1 — the picker can no longer be empty, and the app explains itself
