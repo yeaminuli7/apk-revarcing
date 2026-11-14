@@ -72,7 +72,10 @@ and the app opens with every voice ready.
 | | |
 |---|---|
 | **Built-in** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v3.3-builtin |
-| **Slim** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v3.3-slim |
+| Asset | `BalaSpeak-v3.3-builtin-allvoices-arm64.apk` — 340,417,734 B (325 MiB) |
+| SHA-256 | `6d5480e625c3ad7fef3203acc3e34228c1349968d994ffc98002562097bb29ae` |
+| Contents | 1,455 model libs + `assets/tts/libmap.tsv` · `extractNativeLibs=true` (verified in the built APK) |
+| **Slim** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v3.3-slim (22,454,958 B) |
 | Version | 3.3 (versionCode 24) · same key as v2.8–v3.2 |
 
 ## 🩺 v3.2 — the real reason English/Hindi never worked (and the crash on टेस्ट)
