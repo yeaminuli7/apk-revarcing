@@ -48,6 +48,33 @@ If an older build signed with a different key is already installed, uninstall it
 A full source analysis and build report is in **[ANALYSIS.md](ANALYSIS.md)**.
 Which voice models are worth switching to in 2026 — **[docs/VOICE-MODELS-2026.md](docs/VOICE-MODELS-2026.md)**.
 
+## ⚡ v3.3 — nothing runs at first launch: the installer places the models
+
+The old flow copied 414 MB into the app's folder the first time you opened it — slow, and
+the step that kept failing. Now the models ship as **native libraries**:
+
+* `scripts/prepare_builtin_assets.sh` unpacks every archive and writes each file as
+  `app/src/main/jniLibs/arm64-v8a/libvNNNN.so`, plus a manifest
+  `assets/tts/libmap.tsv` (`lang ⇥ relative-path ⇥ lib-name`);
+* the manifest sets `android:extractNativeLibs="true"` and Gradle uses
+  `jniLibs { useLegacyPackaging = true; keepDebugSymbols += "**/*.so" }`, so the
+  **package manager itself** extracts all ~414 MB into `/data/app/…/lib/arm64/` while
+  installing the APK;
+* on first launch `materializeBundledPack()` only creates **symlinks** from
+  `files/tts/<lang>/…` to those files — about 1,456 links, well under a second, no data
+  copy. If a device refuses symlinks it copies from the lib dir, and if the libs were
+  never extracted it streams them out of the APK — but there is no "preparing voices"
+  wait any more.
+
+Install takes a little longer (that is the point — it is the step that now does the work),
+and the app opens with every voice ready.
+
+| | |
+|---|---|
+| **Built-in** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v3.3-builtin |
+| **Slim** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v3.3-slim |
+| Version | 3.3 (versionCode 24) · same key as v2.8–v3.2 |
+
 ## 🩺 v3.2 — the real reason English/Hindi never worked (and the crash on टेस्ट)
 
 **Root cause found.** `findFirst()` matched *files* only:

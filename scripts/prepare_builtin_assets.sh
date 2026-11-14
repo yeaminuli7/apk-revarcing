@@ -73,16 +73,63 @@ for voice in pratham rohan priyamvada; do
 done
 need "$ASSETS/tts/bn" model.onnx
 
-# 4. drop the archives — the extracted tree replaces them
+# 4. hand the unpacked models to the *installer*: they go into jniLibs, so the
+#    package manager extracts them into /data/app/…/lib/arm64 at install time and
+#    the app never has to copy 414 MB on first launch.
+JNI="$ROOT/app/src/main/jniLibs/arm64-v8a"
+MANIFEST="$ASSETS/tts/libmap.tsv"
+rm -rf "$JNI"
+mkdir -p "$JNI"
+: > "$MANIFEST"
+n=0
+
+# pack <lang> <src-root>  — every file under src-root becomes libvNNNN.so
+pack() {
+  local lang="$1" srcroot="$2" f rel lib
+  while IFS= read -r -d '' f; do
+    rel="${f#"$srcroot"/}"
+    lib=$(printf 'libv%04d.so' "$n")
+    cp "$f" "$JNI/$lib"
+    printf '%s\t%s\t%s\n' "$lang" "$rel" "$lib" >> "$MANIFEST"
+    n=$((n + 1))
+  done < <(find "$srcroot" -type f -print0 | sort -z)
+}
+
+pack en "$EXP/en"
+pack hi "$EXP/hi"                       # includes pratham/ rohan/ priyamvada/
+lib=$(printf 'libv%04d.so' "$n")
+cp "$ASSETS/tts/bn/model.onnx" "$JNI/$lib"
+printf 'bn\tmodel.onnx\t%s\n' "$lib" >> "$MANIFEST"
+n=$((n + 1))
+
+# 5. assets now only carry the (tiny) manifest + bn vocab
+rm -rf "$EXP" "$ASSETS/tts/bn/model.onnx"
 rm -f "$ASSETS"/tts/hi/*/*.tar.bz2 "$ASSETS"/tts/en/*.tar.bz2
+rmdir "$ASSETS/tts/bn" 2>/dev/null || true
 if find "$ASSETS" -name '*.tar.bz2' -print -quit | grep -q .; then
   echo "ERROR: archives still present in assets" >&2
   exit 1
 fi
 
+# 6. sanity: one lib per manifest line, unique names, sane relative paths
+lines=$(grep -c . "$MANIFEST")
+libs=$(find "$JNI" -name 'libv*.so' | wc -l)
+[ "$lines" -eq "$libs" ] || { echo "ERROR: manifest $lines lines vs $libs libs" >&2; exit 1; }
+[ "$(cut -f3 "$MANIFEST" | sort -u | wc -l)" -eq "$lines" ] || { echo "ERROR: duplicate lib names" >&2; exit 1; }
+if awk -F'\t' '{print $2}' "$MANIFEST" | grep -qE '^\.\./|^/'; then
+  echo "ERROR: unsafe relative path in manifest" >&2
+  exit 1
+fi
+for lang in en hi bn; do
+  grep -q "^$lang	" "$MANIFEST" || { echo "ERROR: no entries for $lang" >&2; exit 1; }
+done
+
 echo "──────────────────────────────────────────────"
-echo "assets/tts: $(du -sh "$ASSETS/tts" | cut -f1), $(find "$ASSETS/tts" -type f | wc -l) files"
-echo "largest files:"
-find "$ASSETS/tts" -type f -printf '%10s  %P\n' | sort -rn | head -8
-echo "extracted tree:"
-find "$EXP" -maxdepth 3 -type d | sed "s|$ASSETS/||" | sort
+echo "jniLibs:  $(du -sh "$JNI" | cut -f1), $libs model libs"
+echo "manifest: $(du -sh "$MANIFEST" | cut -f1), $lines entries"
+echo "largest model libs:"
+find "$JNI" -name 'libv*.so' -printf '%10s  %f\n' | sort -rn | head -6
+echo "per language:"
+for lang in bn en hi; do
+  echo "  $lang: $(grep -c "^$lang	" "$MANIFEST") files"
+done

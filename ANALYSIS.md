@@ -366,3 +366,25 @@ Second defect of the same report — the app dying when testing a copied model:
   414 MB was the memory spike behind the crash; engines now load on first real use;
 * `CrashLog` (rolling 48 KB file + `Thread.setDefaultUncaughtExceptionHandler`) records
   anything that still fails, readable in-app without adb.
+
+
+## 15. v3.3 — moving the model placement to install time
+
+Copying 414 MB on first launch was wrong twice over: it is slow, and it is the step that
+failed on the user's phone. Android offers exactly one way to have the *installer* put
+bytes on disk: native libraries.
+
+* Every unpacked model file is written to `app/src/main/jniLibs/arm64-v8a/libvNNNN.so`
+  and recorded in `assets/tts/libmap.tsv` (`lang`, relative path, lib name).
+* `android:extractNativeLibs="true"` + `packaging.jniLibs.useLegacyPackaging = true` make
+  the package manager extract `lib/…` into `/data/app/<pkg>/lib/<abi>/` during install.
+* `keepDebugSymbols += "**/*.so"` stops AGP from running `strip` on files that are model
+  weights, not ELF objects.
+* `materializeBundledPack(pack)` rebuilds the directory tree with `Os.symlink()`:
+  1,456 links, ≪1 s, zero bytes copied. Fallbacks: copy from the lib dir; stream out of
+  the APK zip (`applicationInfo.sourceDir`) if the libs were never extracted.
+* CI asserts the APK really contains `lib/arm64-v8a/libvNNNN.so` entries, that their count
+  equals the manifest lines, and that no model bytes remain under `assets/tts/extracted/`.
+
+Consequence: the first launch has nothing to compute, nothing to copy and nothing to
+download; the picker is complete immediately.

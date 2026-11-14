@@ -14,8 +14,8 @@ android {
     applicationId = "com.aistudio.balaspeak.ytwqzn"
     minSdk = 24
     targetSdk = 36
-    versionCode = 23
-    versionName = "3.2"
+    versionCode = 24
+    versionName = "3.3"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -90,7 +90,16 @@ android {
   }
   packaging {
     // sherpa-onnx AAR and onnxruntime-android both ship libonnxruntime.so
-    jniLibs { pickFirsts += "**/libonnxruntime.so" }
+    jniLibs {
+      pickFirsts += "**/libonnxruntime.so"
+      // The voice models ship as jniLibs so the INSTALLER places them for us
+      // (see scripts/prepare_builtin_assets.sh). Legacy packaging = the package
+      // manager extracts lib/… into /data/app/…/lib/<abi>/ as real files, which is
+      // the whole point: after install there is nothing left to copy on first run.
+      useLegacyPackaging = true
+      // These are model weights, not ELF objects — never run strip on them.
+      keepDebugSymbols += "**/*.so"
+    }
   }
   buildFeatures {
     compose = true
