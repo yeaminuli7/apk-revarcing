@@ -315,11 +315,21 @@ class NeuralVoiceManager private constructor(context: Context) {
     private fun materializeBundledPack(pack: Pack): Boolean {
         val entries = libManifest().filter { it.first == pack.langCode }
         if (entries.isEmpty()) return false
-        if (isInstalled(pack.langCode)) return true
 
         val dir = packDir(pack.langCode)
         val libDir = appContext.applicationInfo.nativeLibraryDir?.let { File(it) }
         val haveExtractedLibs = libDir != null && entries.all { File(libDir, it.third).exists() }
+
+        // An app update moves the lib directory, so links created by the previous
+        // version point into a path that no longer exists. Track it and re-link.
+        val stamp = File(dir, ".lib-source")
+        val currentSource = libDir?.absolutePath ?: "apk"
+        val stampMatches = try {
+            stamp.exists() && stamp.readText().trim() == currentSource
+        } catch (t: Throwable) {
+            false
+        }
+        if (isInstalled(pack.langCode) && stampMatches) return true
 
         _states.value = _states.value + (pack.langCode to PackState.Preparing(0, entries.size))
         var done = 0
@@ -329,7 +339,10 @@ class NeuralVoiceManager private constructor(context: Context) {
             for (entry in entries) {
                 val dst = File(dir, entry.second)
                 dst.parentFile?.mkdirs()
-                if (dst.exists()) dst.delete()
+                // Delete unconditionally: after an app UPDATE the old links point at the
+                // previous /data/app/…-2/lib/… path, so exists() is false for a broken
+                // symlink while symlink() would still fail with EEXIST.
+                dst.delete()
                 val src = File(libDir, entry.third)
                 val linked = try {
                     android.system.Os.symlink(src.absolutePath, dst.absolutePath)
@@ -374,6 +387,11 @@ class NeuralVoiceManager private constructor(context: Context) {
         }
 
         installedCache.remove(pack.langCode)
+        try {
+            stamp.writeText(currentSource)
+        } catch (t: Throwable) {
+            Log.w(TAG, "could not write link stamp: ${t.message}")
+        }
         Log.i(TAG, "placed ${entries.size} bundled files for ${pack.langCode} via $mode")
         return isInstalled(pack.langCode)
     }
