@@ -1,12 +1,12 @@
-BalaSpeak v3.1 — built-in voices (all languages)
-built:  2026-11-13T17:02:55Z
-commit: f8e73960043b9e62085ffeeb673b755c8c5d81a7
-asset:  BalaSpeak-v3.1-builtin-allvoices-arm64.apk
-size:   433527754 bytes (414M)
-sha256: 6d4ba93180862605825ab6a3834b62575bf9a7d3360e595ca7a17dc4593586f7
+BalaSpeak v3.2 — built-in voices (all languages)
+built:  2026-11-14T06:18:54Z
+commit: 7203836b455ecbf2e0334f0da0eb96dc6c168f8a
+asset:  BalaSpeak-v3.2-builtin-allvoices-arm64.apk
+size:   433527759 bytes (414M)
+sha256: fcd3c016893970359d88532fe4958b5c351e4bd8752f533955f377a80a6e8bc8
 signed: v1 + v2 + v3, stable keystore (keystore/balaspeak-release.p12)
 built without R8 minification (character voices stay intact)
-abi:    arm64-v8a (minSdk 24, targetSdk 36, versionCode 22)
+abi:    arm64-v8a (minSdk 24, targetSdk 36, versionCode 23)
 voices: English 31 characters (ages + monster/robot/ghost/...), Bangla 6, Hindi 6
 layout: models are pre-unpacked in assets/tts/extracted/ (no bzip2 on the phone)
         first launch copies the tree into filesDir (~1-2 min, one time)
