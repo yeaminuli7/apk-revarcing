@@ -48,6 +48,40 @@ If an older build signed with a different key is already installed, uninstall it
 A full source analysis and build report is in **[ANALYSIS.md](ANALYSIS.md)**.
 Which voice models are worth switching to in 2026 — **[docs/VOICE-MODELS-2026.md](docs/VOICE-MODELS-2026.md)**.
 
+## 🩺 v3.2 — the real reason English/Hindi never worked (and the crash on टेस्ट)
+
+**Root cause found.** `findFirst()` matched *files* only:
+
+```kotlin
+private fun findFirst(dir: File, suffix: String) =
+    dir.walkTopDown().firstOrNull { it.isFile && it.name.endsWith(suffix) }
+```
+
+but `espeak-ng-data` is a **directory**. So `isInstalled("en")` / `isInstalled("hi")` were
+always `false`, every copy ended with *"Pack files missing after extraction"*, and the
+engine was handed `dataDir = ""`. Only Bangla (which has no espeak data) ever installed —
+exactly the "one voice model copied, the rest error" behaviour. Fixed with a
+directory-aware `findDirNamed()` used by install-detection, `filesStatus()` and the
+engine config; Kokoro/Piper now get a real `dataDir` (and a nested `dict`).
+
+**Crash on টেস্ট.** Three hardening changes:
+
+* every voice hot path catches `Throwable`, not `Exception` — OOM and
+  `UnsatisfiedLinkError` no longer escape into a coroutine and kill the app;
+* the MMS engine no longer feeds a hardcoded `"x"` tensor: it asks the model for its
+  input name, and the 114 MB direct-ONNX model is excluded from auto warm-up;
+* a rolling diagnostics log (`com.example.util.CrashLog`, uncaught-exception handler +
+  explicit entries) is readable in **Settings → 🎙️ AI Voice Packs → লগ**.
+
+Auto warm-up is now off (`autoWarmup = false`): loading 100–140 MB of model immediately
+after writing 400+ MB was the main memory-pressure crash.
+
+| | |
+|---|---|
+| **Built-in** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v3.2-builtin |
+| **Slim** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v3.2-slim |
+| Version | 3.2 (versionCode 23) · same key as v2.8–v3.1 |
+
 ## 🔧 v3.1 — the picker can no longer be empty, and the app explains itself
 
 v3.0 unbundled the bzip2 step, but three things could still leave the voice list empty

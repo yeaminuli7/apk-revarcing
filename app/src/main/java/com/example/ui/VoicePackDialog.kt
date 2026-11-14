@@ -63,6 +63,7 @@ fun NeuralVoicePackDialog(
     val scope = rememberCoroutineScope()
     var testResults by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var showDetails by remember { mutableStateOf(false) }
+    var logText by remember { mutableStateOf<String?>(null) }
 
     val readyCount = manager.packs.count { manager.isInstalled(it.langCode) }
 
@@ -187,7 +188,11 @@ fun NeuralVoicePackDialog(
                                     enabled = !isBusy && installed,
                                     onClick = {
                                         scope.launch {
-                                            val msg = manager.selfTest(pack.langCode)
+                                            // Never let a test take the app down with it.
+                                            val msg = runCatching { manager.selfTest(pack.langCode) }
+                                                .getOrElse {
+                                                    "❌ ${it.javaClass.simpleName}: ${it.message ?: "crash"}"
+                                                }
                                             testResults = testResults + (pack.langCode to msg)
                                         }
                                     }
@@ -217,9 +222,11 @@ fun NeuralVoicePackDialog(
                                                 enabled = !isBusy,
                                                 onClick = {
                                                     scope.launch {
-                                                        val err = manager.preview(pack.langCode, role.id)
-                                                        if (err != null) {
-                                                            manager.reportPreviewError(pack.langCode, err)
+                                                        runCatching {
+                                                            val err = manager.preview(pack.langCode, role.id)
+                                                            if (err != null) {
+                                                                manager.reportPreviewError(pack.langCode, err)
+                                                            }
                                                         }
                                                     }
                                                 },
@@ -246,11 +253,27 @@ fun NeuralVoicePackDialog(
                     fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                logText?.let { log ->
+                    Spacer(Modifier.height(8.dp))
+                    Text("ডায়াগনস্টিক লগ", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        log,
+                        fontSize = 9.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = { showDetails = !showDetails }) {
-                Text(if (showDetails) "বিস্তারিত লুকান" else "বিস্তারিত দেখুন")
+            Row {
+                TextButton(onClick = {
+                    logText = if (logText == null) com.example.util.CrashLog.read(context) else null
+                }) { Text(if (logText == null) "লগ" else "লগ লুকান", fontSize = 12.sp) }
+                TextButton(onClick = { showDetails = !showDetails }) {
+                    Text(if (showDetails) "বিস্তারিত লুকান" else "বিস্তারিত", fontSize = 12.sp)
+                }
             }
         },
         dismissButton = {

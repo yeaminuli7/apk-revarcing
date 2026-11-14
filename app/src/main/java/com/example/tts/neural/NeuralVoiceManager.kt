@@ -28,6 +28,7 @@ import okhttp3.Request
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import org.json.JSONObject
+import com.example.util.CrashLog
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -191,6 +192,14 @@ class NeuralVoiceManager private constructor(context: Context) {
      */
     private val preExtractedRoot = "tts/extracted"
 
+    /**
+     * Load every engine right after provisioning? Costs 100–140 MB of RAM exactly
+     * when the phone has just written 400+ MB, which is what killed the process on
+     * low-memory devices. Engines are now created lazily on first use, and the
+     * diagnostics "টেস্ট" button verifies one language on demand.
+     */
+    private val autoWarmup = false
+
     private fun assetDirExists(assetPath: String): Boolean = try {
         (appContext.assets.list(assetPath) ?: emptyArray()).isNotEmpty()
     } catch (e: Exception) {
@@ -271,6 +280,14 @@ class NeuralVoiceManager private constructor(context: Context) {
     private fun findFirst(dir: File, suffix: String): File? =
         dir.walkTopDown().firstOrNull { it.isFile && it.name.endsWith(suffix) }
 
+    /**
+     * Finds a *directory* by name. [findFirst] only matches files, which is why
+     * `espeak-ng-data` (a directory) was never found and English/Hindi were
+     * reported as "files missing" right after a successful copy.
+     */
+    private fun findDirNamed(dir: File, name: String): File? =
+        dir.walkTopDown().firstOrNull { it.isDirectory && it.name.equals(name, ignoreCase = true) }
+
     suspend fun ensurePacksInstalled() {
         for (pack in packs) {
             if (isInstalled(pack.langCode)) continue
@@ -332,7 +349,9 @@ class NeuralVoiceManager private constructor(context: Context) {
                 ortSessions.remove(pack.langCode)?.close()
                 installedCache.remove(pack.langCode)
                 _states.value = _states.value + (pack.langCode to PackState.Ready)
-                scope.launch {
+                // Warm-up loads the whole engine; skip it for the direct ONNX model
+                // (114 MB) so a low-RAM phone does not die at startup.
+                if (autoWarmup && pack.engine != "mms_direct") scope.launch {
                     _busy.value = _busy.value + pack.langCode
                     val test = File(appContext.cacheDir, "warmup_${pack.langCode}.wav")
                     val ok = synthesizeToFileBlocking(
@@ -345,8 +364,10 @@ class NeuralVoiceManager private constructor(context: Context) {
                             (pack.langCode to "Engine warm-up failed — device may be low on memory")
                     }
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 Log.e(TAG, "Pack install failed (${pack.langCode}): ${e.message}", e)
+                CrashLog.append(appContext, "install ${pack.langCode}: ${e.javaClass.simpleName}: ${e.message}")
                 _states.value = _states.value + (pack.langCode to PackState.Failed(e.message ?: "error"))
             }
         }
@@ -374,13 +395,13 @@ class NeuralVoiceManager private constructor(context: Context) {
             "hi" -> listOf("pratham", "rohan", "priyamvada").all { voice ->
                 val vDir = File(dir, voice)
                 findFirst(vDir, ".onnx") != null && findFile(vDir, "tokens.txt") != null &&
-                        findFirst(vDir, "espeak-ng-data")?.isDirectory == true
+                        findDirNamed(vDir, "espeak-ng-data")?.isDirectory == true
             }
             "en" -> findFile(dir, "model.int8.onnx") != null &&
                     findFile(dir, "voices.bin") != null &&
                     findFile(dir, "tokens.txt") != null &&
                     findFile(dir, "lexicon-us-en.txt") != null &&
-                    findFirst(dir, "espeak-ng-data")?.isDirectory == true
+                    findDirNamed(dir, "espeak-ng-data")?.isDirectory == true
             else -> false
         }
     }
@@ -468,8 +489,10 @@ class NeuralVoiceManager private constructor(context: Context) {
                 _lastError.value = _lastError.value - langCode
                 _states.value = _states.value + (langCode to PackState.NotDownloaded)
                 downloadPack(pack)
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 Log.e(TAG, "Retry failed for $langCode: ${e.message}", e)
+                CrashLog.append(appContext, "retry $langCode: ${e.javaClass.simpleName}: ${e.message}")
                 _lastError.value = _lastError.value + (langCode to (e.message ?: "retry failed"))
             } finally {
                 provisioning.remove(langCode)
@@ -488,8 +511,9 @@ class NeuralVoiceManager private constructor(context: Context) {
             synthesizeToFileBlocking(
                 "Hello. This is a voice test.", "cast:young_male:$langCode", langCode, 1f, 1f, out
             )
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.e(TAG, "selftest failed: ${e.message}", e)
+            CrashLog.append(appContext, "selftest $langCode: ${e.javaClass.simpleName}: ${e.message}")
             false
         }
         val ms = System.currentTimeMillis() - started
@@ -512,14 +536,14 @@ class NeuralVoiceManager private constructor(context: Context) {
                 val vd = File(dir, v)
                 if (findFirst(vd, ".onnx") == null) missing.add("$v/*.onnx")
                 if (findFile(vd, "tokens.txt") == null) missing.add("$v/tokens.txt")
-                if (findFirst(vd, "espeak-ng-data")?.isDirectory != true) missing.add("$v/espeak-ng-data")
+                if (findDirNamed(vd, "espeak-ng-data")?.isDirectory != true) missing.add("$v/espeak-ng-data")
             }
             "en" -> {
                 if (findFile(dir, "model.int8.onnx") == null) missing.add("model.int8.onnx")
                 if (findFile(dir, "voices.bin") == null) missing.add("voices.bin")
                 if (findFile(dir, "tokens.txt") == null) missing.add("tokens.txt")
                 if (findFile(dir, "lexicon-us-en.txt") == null) missing.add("lexicon-us-en.txt (v1.0 pack)")
-                if (findFirst(dir, "espeak-ng-data")?.isDirectory != true) missing.add("espeak-ng-data")
+                if (findDirNamed(dir, "espeak-ng-data")?.isDirectory != true) missing.add("espeak-ng-data")
             }
         }
         return if (missing.isEmpty()) "files OK" else "missing: " + missing.joinToString(", ")
@@ -591,8 +615,9 @@ class NeuralVoiceManager private constructor(context: Context) {
                 "mms_direct" -> synthesizeMmsDirect(lang, text, speed * speedForRole(roleId), pitch * pitchForRole(roleId), outFile)
                 else -> false
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.e(TAG, "Neural synthesis failed ($lang/$roleId): ${e.message}", e)
+            CrashLog.append(appContext, "synth $lang/$roleId: ${e.javaClass.simpleName}: ${e.message}")
             false
         }
     }
@@ -638,9 +663,21 @@ class NeuralVoiceManager private constructor(context: Context) {
         val blanked = LongArray(ids.size * 2 + 1) { i ->
             if (i % 2 == 1) ids[i / 2].toLong() else 0L
         }
+        // Never assume the input is called "x": ask the model. A wrong feed name is
+        // exactly the kind of mistake that ends in a native abort (app crash).
+        val inputName = try {
+            session.inputNames.firstOrNull()
+        } catch (t: Throwable) {
+            CrashLog.append(appContext, "mms inputNames: ${t.javaClass.simpleName}")
+            null
+        }
+        if (inputName.isNullOrBlank()) {
+            _lastError.value = _lastError.value + (lang to "MMS model exposes no inputs")
+            return false
+        }
         val tensor = OnnxTensor.createTensor(env, LongBuffer.wrap(blanked), longArrayOf(1, blanked.size.toLong()))
         val audio = try {
-            session.run(mapOf("x" to tensor)).use { result ->
+            session.run(mapOf(inputName to tensor)).use { result ->
                 when (val v = result[0].value) {
                     is Array<*> -> when {
                         v.isEmpty() -> FloatArray(0)
@@ -952,7 +989,15 @@ class NeuralVoiceManager private constructor(context: Context) {
 
     /** Fire-and-forget preview used by UI and by TextToSpeechManager. */
     fun previewAsync(langCode: String, roleId: String, speed: Float = 1f, pitch: Float = 1f) {
-        scope.launch { preview(langCode, roleId, speed, pitch) }
+        scope.launch {
+            try {
+                preview(langCode, roleId, speed, pitch)
+            } catch (t: Throwable) {
+                Log.e(TAG, "preview crashed ($langCode/$roleId)", t)
+                CrashLog.append(appContext, "preview $langCode/$roleId: ${t.javaClass.simpleName}: ${t.message}")
+                _lastError.value = _lastError.value + (langCode to (t.message ?: "preview failed"))
+            }
+        }
     }
 
     private fun stopPreviewLocked() {
@@ -1012,8 +1057,9 @@ class NeuralVoiceManager private constructor(context: Context) {
             ortSessions.remove(pack.langCode)?.close()
             installedCache.remove(pack.langCode)
             _states.value = _states.value + (pack.langCode to PackState.Ready)
-            // Warm the engine up right away and surface any init problem NOW.
-            scope.launch {
+            // Warm the engine up right away and surface any init problem NOW
+            // (skipped for the direct ONNX model: 114 MB, not worth it at startup).
+            if (autoWarmup && pack.engine != "mms_direct") scope.launch {
                 _busy.value = _busy.value + pack.langCode
                 val test = File(appContext.cacheDir, "warmup_${pack.langCode}.wav")
                 val ok = synthesizeToFileBlocking(
@@ -1026,8 +1072,10 @@ class NeuralVoiceManager private constructor(context: Context) {
                         (pack.langCode to "Engine warm-up failed — device may be low on memory")
                 }
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Log.e(TAG, "Pack download failed (${pack.langCode}): ${e.message}", e)
+            CrashLog.append(appContext, "download ${pack.langCode}: ${e.javaClass.simpleName}: ${e.message}")
             _states.value = _states.value + (pack.langCode to PackState.Failed(e.message ?: "error"))
         }
     }
@@ -1127,7 +1175,7 @@ class NeuralVoiceManager private constructor(context: Context) {
                     val modelDir = if (key.contains(":")) File(dir, key.substringAfter(":")) else dir
                     val modelFile = findFirst(modelDir, ".onnx") ?: return null
                     val tokensFile = findFile(modelDir, "tokens.txt") ?: return null
-                    val espeakDir = findFirst(modelDir, "espeak-ng-data")
+                    val espeakDir = findDirNamed(modelDir, "espeak-ng-data")
                     // Kokoro v1.0 multi-lang extras (absent in the old v0.19 pack —
                     // every lookup is filtered, so both pack generations keep working).
                     val lexicon = listOf("lexicon-us-en.txt", "lexicon-gb-en.txt", "lexicon-zh.txt")
@@ -1136,7 +1184,8 @@ class NeuralVoiceManager private constructor(context: Context) {
                     val ruleFsts = listOf("date-zh.fst", "number-zh.fst", "phone-zh.fst")
                         .mapNotNull { findFile(modelDir, it) }
                         .joinToString(",") { it.absolutePath }
-                    val dictDir = File(modelDir, "dict").takeIf { it.isDirectory }?.absolutePath ?: ""
+                    val dictDir = (File(modelDir, "dict").takeIf { it.isDirectory }
+                        ?: findDirNamed(modelDir, "dict"))?.absolutePath ?: ""
                     val modelCfg: OfflineTtsModelConfig = if (pack.engine == "kokoro") {
                         OfflineTtsModelConfig(
                             kokoro = OfflineTtsKokoroModelConfig(
@@ -1173,8 +1222,9 @@ class NeuralVoiceManager private constructor(context: Context) {
                     sherpaEngines[key] = tts
                     tts
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Log.e(TAG, "Failed to init sherpa engine '$key': ${e.message}", e)
+                CrashLog.append(appContext, "engine '$key': ${e.javaClass.simpleName}: ${e.message}")
                 _lastError.value = _lastError.value +
                     (key.substringBefore(":") to "engine: ${e.message?.take(120)}")
                 null
@@ -1193,8 +1243,9 @@ class NeuralVoiceManager private constructor(context: Context) {
                 val session = OrtEnvironment.getEnvironment().createSession(modelFile.absolutePath, opts)
                 ortSessions[lang] = session
                 session
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Log.e(TAG, "Failed to init ORT session for $lang: ${e.message}", e)
+                CrashLog.append(appContext, "ort '$lang': ${e.javaClass.simpleName}: ${e.message}")
                 _lastError.value = _lastError.value + (lang to "engine: ${e.message?.take(120)}")
                 null
             }

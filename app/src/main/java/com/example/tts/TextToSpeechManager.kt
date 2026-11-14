@@ -205,8 +205,11 @@ class TextToSpeechManager(private val context: Context) {
                     }
                 }
             }
-        } catch (e: Exception) {
-            Log.e("BalaSpeakTTS", "Error previewing block: ${e.message}")
+        } catch (e: Throwable) {
+            Log.e("BalaSpeakTTS", "Error previewing block: ${e.message}", e)
+            com.example.util.CrashLog.append(
+                context, "previewBlock: ${e.javaClass.simpleName}: ${e.message}"
+            )
             _previewingVoiceId.value = null
         }
     }

@@ -331,3 +331,38 @@ streamed `Failed` into a place the user could not see. v3.1 adds
 If the app still misbehaves, the dialog now names the reason: storage, a missing file, an
 engine error, or a synthesis failure with the engine's own message. That is testable
 without a logcat.
+
+
+## 14. v3.2 — `findFirst()` vs `espeak-ng-data`
+
+```kotlin
+// used by isInstalledUncached(), filesStatus() and sherpaEngine()
+private fun findFirst(dir: File, suffix: String): File? =
+    dir.walkTopDown().firstOrNull { it.isFile && it.name.endsWith(suffix) }
+```
+
+`espeak-ng-data` is a directory, so `findFirst(dir, "espeak-ng-data")` always returned
+`null`:
+
+* `isInstalledUncached("en")`/`("hi")` → `false` → after a perfectly good copy:
+  `IllegalStateException("Pack files missing after extraction")` (the exact error the user
+  reported), and `isReady()` false → no English/Hindi voices, ever;
+* `sherpaEngine()` passed `dataDir = ""` to Kokoro/Piper → phonemisation fails even if it
+  had been marked ready;
+* `"bn"` only checks `model.onnx`, so Bangla installed fine — which is why exactly one
+  language appeared to work.
+
+Fix: `findDirNamed(dir, name)` for directories, used in the three places above, plus a
+fallback for a nested `dict/` folder.
+
+Second defect of the same report — the app dying when testing a copied model:
+
+* catches upgraded from `Exception` to `Throwable` in install/download/retry/engine/synth/
+  preview paths (with `CancellationException` re-thrown), so `OutOfMemoryError` and
+  `UnsatisfiedLinkError` become a message instead of a process kill;
+* `synthesizeMmsDirect()` no longer hardcodes the feed name `"x"` — it reads
+  `session.inputNames` (a wrong tensor name is the classic way to reach a native abort);
+* `autoWarmup = false`: warming Kokoro (114 MB) or the MMS model right after writing
+  414 MB was the memory spike behind the crash; engines now load on first real use;
+* `CrashLog` (rolling 48 KB file + `Thread.setDefaultUncaughtExceptionHandler`) records
+  anything that still fails, readable in-app without adb.

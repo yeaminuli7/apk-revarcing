@@ -62,6 +62,8 @@ import kotlinx.coroutines.flow.collectLatest
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Rolling in-app diagnostics log (native crashes / OOM are invisible otherwise).
+        com.example.util.CrashLog.install(applicationContext)
         enableEdgeToEdge()
         setContent {
             val viewModel: DocumentViewModel = viewModel()
