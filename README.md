@@ -48,6 +48,36 @@ If an older build signed with a different key is already installed, uninstall it
 A full source analysis and build report is in **[ANALYSIS.md](ANALYSIS.md)**.
 Which voice models are worth switching to in 2026 — **[docs/VOICE-MODELS-2026.md](docs/VOICE-MODELS-2026.md)**.
 
+## 🎙 v3.4 — saved voices (one tap instead of searching) + the render button you could not see
+
+**Why “Render dub” seemed to be missing:** the screen was one non-scrolling column — title,
+video (210 dp), player, block navigator, block editor, lock row *and* the action bar. On a
+phone that is taller than the screen, and a `Column` clips at the bottom, so the button was
+pushed past the edge. It is now **pinned**: the player, the block editor and the block list
+scroll inside the middle, the action bar always sits at the bottom, and the video preview
+collapses with the 👁 button (which buys ~180 dp). When the button is disabled it says
+*why*: “🎬 ভিডিও দিন…” / “📝 সাবটাইটেল দিন…”.
+
+**Saved voices** — set a character once, tap it forever:
+
+| Where | What it does |
+|---|---|
+| Voice picker → **⭐ Save “Amelia” for one-tap reuse** | names the character and saves it |
+| Voice picker → **⭐ chips** at the top | one tap = that voice on **every** block |
+| Dubber V2 header → **⭐ Voices / Change** | apply, rename, delete, or turn the lock off |
+| Header → **Lock all 🔒** | re-applies the saved voice to the blocks in front of you |
+| Loading the **next video / subtitle** | the saved voice is the default for all new blocks |
+
+Stored in `balaspeak_studio_prefs` (`pref_voice_presets`, `pref_voice_preset_active`) with
+`VoicePresetStore`, so it survives restarts and updates.
+
+| | |
+|---|---|
+| **v3.4 built-in** | https://github.com/yeaminuli7/apk-revarcing/releases/tag/v3.4-builtin |
+| Asset / size | `BalaSpeak-v3.4-builtin-allvoices-arm64.apk` — 340,441,514 B |
+| SHA-256 | `88a55f62811b67f3d4c0468e56b2cef88db1956611f0d5bcc4770c2d191ecda4` |
+| Version | 3.4 (versionCode 25) · v1+v2+v3 · installs over v2.8 → v3.3 |
+
 ## ⚡ v3.3 — nothing runs at first launch: the installer places the models
 
 The old flow copied 414 MB into the app's folder the first time you opened it — slow, and

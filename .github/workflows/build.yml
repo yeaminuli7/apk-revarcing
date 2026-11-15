@@ -271,8 +271,8 @@ jobs:
             echo "sha256: ${SHA}"
             echo "signed: v1 + v2 + v3, stable keystore (keystore/balaspeak-release.p12)"
             echo "built without R8 minification (character voices stay intact)"
-            echo "abi:    arm64-v8a (minSdk 24, targetSdk 36, versionCode 24)"
-            echo "voices: English 31 characters (ages + monster/robot/ghost/...), Bangla 6, Hindi 6"
+            echo "abi:    arm64-v8a (minSdk 24, targetSdk 36, versionCode 25)"
+            echo "voices: English 31 characters (ages + monster/robot/ghost/...), Bangla 6, Hindi 6\nfeatures: saved voices (one-tap lock, reused on the next video), pinned Render dub bar"
             echo "layout: models ship as jniLibs — the package manager places them at INSTALL time"
             echo "        first launch only creates links (~0.1 s): nothing downloaded, nothing copied"
             echo
