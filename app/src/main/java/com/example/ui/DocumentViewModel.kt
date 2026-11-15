@@ -25,6 +25,8 @@ import com.example.util.AudioVideoMerger
 import com.example.util.DetectedLanguage
 import com.example.util.LanguageDetector
 import com.example.util.OfflineSubtitleTranslator
+import com.example.data.VoicePreset
+import com.example.data.VoicePresetStore
 import com.example.util.LanguageOption
 import com.example.util.SubtitleEntry
 import com.example.util.SubtitleParser
@@ -189,6 +191,84 @@ class DocumentViewModel(application: Application) : AndroidViewModel(application
     private val _v2Status = MutableStateFlow("Load a video and a subtitle to review")
     val v2Status: StateFlow<String> = _v2Status.asStateFlow()
     private var v2RenderJob: kotlinx.coroutines.Job? = null
+
+    // ---- Saved voices (Dubber V2) -------------------------------------------
+    // The user searches a character once, saves it here, and from then on a single tap
+    // applies it to every block — and to every new video, because it becomes the default.
+    private val _voicePresets = MutableStateFlow(VoicePresetStore.load(prefs))
+    val voicePresets: StateFlow<List<VoicePreset>> = _voicePresets.asStateFlow()
+    private val _voicePresetActiveId = MutableStateFlow(VoicePresetStore.activeId(prefs))
+    val voicePresetActiveId: StateFlow<String?> = _voicePresetActiveId.asStateFlow()
+
+    val activeVoicePreset: VoicePreset?
+        get() = _voicePresets.value.firstOrNull { it.id == _voicePresetActiveId.value }
+
+    /** Saves [voiceId] (or updates the existing preset for that voice) and activates it. */
+    fun saveVoicePreset(name: String, voiceId: String, activate: Boolean = true): VoicePreset? {
+        val cleanName = name.trim().ifBlank { "My voice" }.take(40)
+        val existing = _voicePresets.value.firstOrNull { it.voiceId == voiceId }
+        val preset = existing?.copy(name = cleanName)
+            ?: VoicePreset(
+                id = java.util.UUID.randomUUID().toString().take(8),
+                name = cleanName,
+                voiceId = voiceId
+            )
+        val others = _voicePresets.value.filterNot { it.voiceId == voiceId }
+        if (existing == null && others.size >= VoicePresetStore.MAX_PRESETS) {
+            viewModelScope.launch { _toastMessage.emit("Preset list is full (${VoicePresetStore.MAX_PRESETS}) — delete one first") }
+            return null
+        }
+        val list = (others + preset).sortedBy { it.createdAt }
+        _voicePresets.value = list
+        VoicePresetStore.save(prefs, list)
+        if (activate) setActiveVoicePreset(preset.id)
+        viewModelScope.launch { _toastMessage.emit("⭐ “${preset.name}” saved — tap it any time to lock it in") }
+        return preset
+    }
+
+    fun renameVoicePreset(id: String, name: String) {
+        val clean = name.trim().ifBlank { "My voice" }.take(40)
+        val list = _voicePresets.value.map { if (it.id == id) it.copy(name = clean) else it }
+        _voicePresets.value = list
+        VoicePresetStore.save(prefs, list)
+    }
+
+    fun deleteVoicePreset(id: String) {
+        val list = _voicePresets.value.filterNot { it.id == id }
+        _voicePresets.value = list
+        VoicePresetStore.save(prefs, list)
+        if (_voicePresetActiveId.value == id) setActiveVoicePreset(null)
+        viewModelScope.launch { _toastMessage.emit("Preset deleted") }
+    }
+
+    /**
+     * Makes [id] the active voice: every block switches to it, and it is what new videos
+     * start with. Pass null to go back to automatic detection.
+     */
+    fun setActiveVoicePreset(id: String?) {
+        val preset = _voicePresets.value.firstOrNull { it.id == id }
+        _voicePresetActiveId.value = preset?.id
+        VoicePresetStore.setActiveId(prefs, preset?.id)
+        if (preset == null) {
+            viewModelScope.launch { _toastMessage.emit("Automatic voice detection is back") }
+            return
+        }
+        applyDubberV2VoiceToAll(preset.voiceId, skipPinned = false)
+        _v2Status.value = "🎙 Active voice: ${preset.name} — applied to every block"
+        viewModelScope.launch { _toastMessage.emit("🔒 Every block now uses “${preset.name}”") }
+    }
+
+    /** Re-applies the active preset to the blocks currently loaded. */
+    fun applyActiveVoicePreset() {
+        val preset = activeVoicePreset
+        if (preset == null) {
+            viewModelScope.launch { _toastMessage.emit("Save a voice first — ⭐ in the voice picker") }
+            return
+        }
+        applyDubberV2VoiceToAll(preset.voiceId, skipPinned = false)
+        _v2Status.value = "🎙 “${preset.name}” applied to every block"
+        viewModelScope.launch { _toastMessage.emit("🔒 Every block now uses “${preset.name}”") }
+    }
 
     // ---- Locked blocks & pinned voices (Dubber V2) — persist across restarts ----
     private val cueStateDao by lazy { AppDatabase.getDatabase(getApplication()).dubCueStateDao() }
@@ -2550,7 +2630,8 @@ class DocumentViewModel(application: Application) : AndroidViewModel(application
                 }
                 val sample = entries.take(15).joinToString(" ") { it.text }
                 val detected = LanguageDetector.detectLanguage(sample)
-                val voice = VoiceCast.defaultSpeakerId(detected.code)
+                val locked = activeVoicePreset
+                val voice = locked?.voiceId ?: VoiceCast.defaultSpeakerId(detected.code)
                 _v2DefaultVoice.value = voice
                 val fresh = entries.map { entry ->
                     DubCue(
@@ -2565,7 +2646,11 @@ class DocumentViewModel(application: Application) : AndroidViewModel(application
                 _v2Cues.value = restoreDubberV2States(fresh)
                 _v2SubtitleName.value = cleanName
                 _v2OutputFile.value = null
-                _v2Status.value = "${entries.size} blocks • ${detected.name}. Default speaker is a young man."
+                _v2Status.value = if (locked != null) {
+                    "${entries.size} blocks • ${detected.name}. Locked voice: ${locked.name}."
+                } else {
+                    "${entries.size} blocks • ${detected.name}. Default speaker is a young man."
+                }
                 _toastMessage.emit("Loaded ${entries.size} subtitle blocks")
             } catch (e: Exception) {
                 _v2Status.value = "Subtitle error"

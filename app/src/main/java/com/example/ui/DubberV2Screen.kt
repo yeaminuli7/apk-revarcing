@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -30,12 +31,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Subtitles
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -83,6 +88,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.VoicePreset
 import com.example.tts.FriendlyVoice
 import com.example.tts.VoiceCast
 import kotlinx.coroutines.delay
@@ -103,7 +109,13 @@ fun DubberV2Screen(viewModel: DocumentViewModel) {
     val status by viewModel.v2Status.collectAsStateWithLifecycle()
     val videoVolume by viewModel.v2VideoVolume.collectAsStateWithLifecycle()
     val ttsVolume by viewModel.v2TtsVolume.collectAsStateWithLifecycle()
+    val presets by viewModel.voicePresets.collectAsStateWithLifecycle()
+    val activePresetId by viewModel.voicePresetActiveId.collectAsStateWithLifecycle()
 
+    var previewOpen by remember { mutableStateOf(true) }
+    var mixerOpen by remember { mutableStateOf(false) }
+    var presetManagerOpen by remember { mutableStateOf(false) }
+    var savePresetFor by remember { mutableStateOf<FriendlyVoice?>(null) }
     var selectedId by remember { mutableStateOf<String?>(null) }
     var voiceTargetId by remember { mutableStateOf<String?>(null) }
     var playing by remember { mutableStateOf(false) }
@@ -221,17 +233,21 @@ fun DubberV2Screen(viewModel: DocumentViewModel) {
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
+    val activePreset = presets.firstOrNull { it.id == activePresetId }
+    // Rows that sit above the cue rows in the same list, so "jump to block N" needs an offset.
+    val headerItems = 1 + if (selectedCue != null) 3 else 0
+
     fun gotoCue(index: Int) {
         val cue = cues.getOrNull(index) ?: return
         selectedId = cue.id
         playing = false
         positionMs = cue.startTimeMs.coerceAtLeast(0L)
         seekToMs = cue.startTimeMs.coerceAtLeast(0L)
-        coroutineScope.launch { listState.animateScrollToItem(index) }
+        coroutineScope.launch { listState.animateScrollToItem(headerItems + index) }
     }
 
     LaunchedEffect(activeIndex, playing) {
-        if (playing && activeIndex >= 0) listState.animateScrollToItem(activeIndex)
+        if (playing && activeIndex >= 0) listState.animateScrollToItem(headerItems + activeIndex)
     }
 
     Column(
@@ -239,210 +255,131 @@ fun DubberV2Screen(viewModel: DocumentViewModel) {
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            Text("Dubber V2", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-            Text(
-                "Watch the line, edit the words, and give each block its own voice.",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
-                    onClick = { videoPicker.launch("video/*") },
-                    enabled = !rendering,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Outlined.Movie, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(if (videoName.isBlank()) "Video" else "Change video", fontSize = 12.sp)
-                }
-                OutlinedButton(
-                    onClick = { subtitlePicker.launch("*/*") },
-                    enabled = !rendering,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Outlined.Subtitles, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(if (subtitleName.isBlank()) "Subtitle" else "Change SRT", fontSize = 12.sp)
-                }
-            }
-            if (videoName.isNotBlank() || subtitleName.isNotBlank()) {
+        // ───────────────────────── top bar ─────────────────────────
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Dubber V2", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                 Text(
-                    listOf(videoName, subtitleName).filter { it.isNotBlank() }.joinToString("  •  "),
+                    if (activePreset != null) "🎙 ${activePreset.name} · saved voice"
+                    else "🎙 No saved voice yet",
                     fontSize = 11.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 4.dp)
+                    color = if (activePreset != null) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Text(status, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(210.dp)
-                .padding(horizontal = 12.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color.Black)
-        ) {
-            if (videoFile != null) {
-                AndroidView(factory = { videoView }, modifier = Modifier.fillMaxSize())
-            } else {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Load a video to review", color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp)
-                }
+            if (activePreset != null) {
+                TextButton(
+                    onClick = {
+                        playing = false
+                        viewModel.applyActiveVoicePreset()
+                    },
+                    enabled = cues.isNotEmpty() && !rendering
+                ) { Text("Lock all 🔒", fontSize = 11.sp) }
             }
-            if (activeCue != null) {
-                Surface(
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).fillMaxWidth(),
-                    color = Color.Black.copy(alpha = 0.72f),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(
-                        text = highlightedCue(activeCue, positionMs, Color(0xFFFFE082)),
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
-                    )
-                }
+            TextButton(onClick = { presetManagerOpen = true }) {
+                Text(if (activePreset == null) "⭐ Voices" else "Change", fontSize = 11.sp)
+            }
+            IconButton(onClick = { previewOpen = !previewOpen }) {
+                Icon(
+                    if (previewOpen) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                    contentDescription = if (previewOpen) "Hide preview" else "Show preview",
+                    modifier = Modifier.size(18.dp)
+                )
             }
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            IconButton(onClick = { if (prepared) playing = !playing }, enabled = prepared && !rendering) {
-                Icon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, contentDescription = if (playing) "Pause" else "Play")
-            }
-            Text(formatReviewTime(positionMs), fontSize = 11.sp, modifier = Modifier.width(64.dp))
-            var dragging by remember { mutableStateOf(false) }
-            var dragMs by remember { mutableLongStateOf(0L) }
-            Slider(
-                value = if (durationMs <= 0L) 0f
-                else (if (dragging) dragMs else positionMs).toFloat() / durationMs.toFloat(),
-                onValueChange = { fraction ->
-                    if (durationMs > 0L) {
-                        dragging = true
-                        dragMs = (fraction * durationMs).toLong().coerceIn(0L, durationMs)
-                    }
-                },
-                onValueChangeFinished = {
-                    if (dragging) {
-                        positionMs = dragMs
-                        seekToMs = dragMs
-                        dragging = false
-                    }
-                },
-                enabled = prepared && durationMs > 0L,
-                modifier = Modifier.weight(1f)
-            )
-            Text(formatReviewTime(durationMs), fontSize = 11.sp, modifier = Modifier.padding(end = 8.dp))
-        }
-
-        if (selectedCue != null) {
-            val selIdx = cues.indexOfFirst { it.id == selectedCue.id }
-            val prevCue = cues.getOrNull(selIdx - 1)
-            val nextCue = cues.getOrNull(selIdx + 1)
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedButton(
-                    onClick = { gotoCue(selIdx - 1) },
-                    enabled = selIdx > 0 && !rendering,
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                    modifier = Modifier.height(32.dp)
-                ) { Text("◀ Prev", fontSize = 11.sp) }
-                Text(
-                    "Block ${selIdx + 1} of ${cues.size}",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f)
-                )
-                OutlinedButton(
-                    onClick = { gotoCue(selIdx + 1) },
-                    enabled = selIdx < cues.size - 1 && !rendering,
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                    modifier = Modifier.height(32.dp)
-                ) { Text("Next ▶", fontSize = 11.sp) }
-            }
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                if (prevCue != null) {
-                    Text(
-                        "◀ Previous: ${prevCue.text}",
-                        fontSize = 10.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                if (nextCue != null) {
-                    Text(
-                        "Next: ${nextCue.text} ▶",
-                        fontSize = 10.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            CueEditor(
-                cue = selectedCue,
-                voiceLabel = voiceLabel(selectedCue.voiceName, voices),
+            OutlinedButton(
+                onClick = { videoPicker.launch("video/*") },
                 enabled = !rendering,
-                onText = { viewModel.updateDubberV2CueText(selectedCue.id, it) },
-                onPickVoice = { voiceTargetId = selectedCue.id },
-                onToggleLock = { viewModel.toggleDubberV2CueLock(selectedCue.id) },
-                onTogglePin = { viewModel.toggleDubberV2CueVoicePin(selectedCue.id) },
-                onPreview = {
-                    playing = false
-                    viewModel.previewDubberV2Cue(selectedCue.id)
-                }
-            )
-        }
-
-        HorizontalDivider()
-
-        if (cues.isNotEmpty()) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                modifier = Modifier.weight(1f).height(36.dp)
             ) {
-                val lockedCount = cues.count { it.locked }
-                val pinnedCount = cues.count { it.voicePinned }
-                Text(
-                    "🔒 $lockedCount locked · 📌 $pinnedCount pinned",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f)
-                )
-                OutlinedButton(
-                    onClick = { viewModel.setAllDubberV2CuesLocked(true) },
-                    enabled = !rendering && lockedCount < cues.size,
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                    modifier = Modifier.height(30.dp)
-                ) { Text("Lock all", fontSize = 11.sp) }
+                Icon(Icons.Outlined.Movie, contentDescription = null, modifier = Modifier.size(15.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                OutlinedButton(
-                    onClick = { viewModel.setAllDubberV2CuesLocked(false) },
-                    enabled = !rendering && lockedCount > 0,
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                    modifier = Modifier.height(30.dp)
-                ) { Text("Unlock all", fontSize = 11.sp) }
+                Text(
+                    if (videoName.isBlank()) "🎬 Video" else videoName,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            OutlinedButton(
+                onClick = { subtitlePicker.launch("*/*") },
+                enabled = !rendering,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                modifier = Modifier.weight(1f).height(36.dp)
+            ) {
+                Icon(Icons.Outlined.Subtitles, contentDescription = null, modifier = Modifier.size(15.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    if (subtitleName.isBlank()) "📝 Subtitle" else subtitleName,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        Text(
+            status,
+            fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+        )
+
+        // ───────────────────────── preview ─────────────────────────
+        if (previewOpen) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+                    .padding(horizontal = 12.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.Black)
+            ) {
+                if (videoFile != null) {
+                    AndroidView(factory = { videoView }, modifier = Modifier.fillMaxSize())
+                } else {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Load a video to review", color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp)
+                    }
+                }
+                if (activeCue != null) {
+                    Surface(
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).fillMaxWidth(),
+                        color = Color.Black.copy(alpha = 0.72f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = highlightedCue(activeCue, positionMs, Color(0xFFFFE082)),
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                        )
+                    }
+                }
             }
         }
 
+        // ─────────────── everything scrolls; the render bar is pinned ───────────────
         if (cues.isEmpty()) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Text(
                     "Load a subtitle. Each timed block will show up here.",
                     fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 24.dp)
                 )
             }
         } else {
@@ -450,8 +387,145 @@ fun DubberV2Screen(viewModel: DocumentViewModel) {
                 state = listState,
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
-                contentPadding = PaddingValues(12.dp)
+                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 8.dp)
             ) {
+                item(key = "player") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = { if (prepared) playing = !playing },
+                            enabled = prepared && !rendering
+                        ) {
+                            Icon(
+                                if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                contentDescription = if (playing) "Pause" else "Play"
+                            )
+                        }
+                        Text(formatReviewTime(positionMs), fontSize = 10.sp, modifier = Modifier.width(58.dp))
+                        var dragging by remember { mutableStateOf(false) }
+                        var dragMs by remember { mutableLongStateOf(0L) }
+                        Slider(
+                            value = if (durationMs <= 0L) 0f
+                            else (if (dragging) dragMs else positionMs).toFloat() / durationMs.toFloat(),
+                            onValueChange = { fraction ->
+                                if (durationMs > 0L) {
+                                    dragging = true
+                                    dragMs = (fraction * durationMs).toLong().coerceIn(0L, durationMs)
+                                }
+                            },
+                            onValueChangeFinished = {
+                                if (dragging) {
+                                    positionMs = dragMs
+                                    seekToMs = dragMs
+                                    dragging = false
+                                }
+                            },
+                            enabled = prepared && durationMs > 0L,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(formatReviewTime(durationMs), fontSize = 10.sp)
+                    }
+                }
+
+                if (selectedCue != null) {
+                    item(key = "nav") {
+                        val selIdx = cues.indexOfFirst { it.id == selectedCue.id }
+                        val prevCue = cues.getOrNull(selIdx - 1)
+                        val nextCue = cues.getOrNull(selIdx + 1)
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedButton(
+                                    onClick = { gotoCue(selIdx - 1) },
+                                    enabled = selIdx > 0 && !rendering,
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(32.dp)
+                                ) { Text("◀ Prev", fontSize = 11.sp) }
+                                Text(
+                                    "Block ${selIdx + 1} of ${cues.size}",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                OutlinedButton(
+                                    onClick = { gotoCue(selIdx + 1) },
+                                    enabled = selIdx < cues.size - 1 && !rendering,
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(32.dp)
+                                ) { Text("Next ▶", fontSize = 11.sp) }
+                            }
+                            if (prevCue != null) {
+                                Text(
+                                    "◀ Previous: ${prevCue.text}",
+                                    fontSize = 10.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (nextCue != null) {
+                                Text(
+                                    "Next: ${nextCue.text} ▶",
+                                    fontSize = 10.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    item(key = "editor") {
+                        CueEditor(
+                            cue = selectedCue,
+                            voiceLabel = voiceLabel(selectedCue.voiceName, voices),
+                            enabled = !rendering,
+                            onText = { viewModel.updateDubberV2CueText(selectedCue.id, it) },
+                            onPickVoice = { voiceTargetId = selectedCue.id },
+                            onToggleLock = { viewModel.toggleDubberV2CueLock(selectedCue.id) },
+                            onTogglePin = { viewModel.toggleDubberV2CueVoicePin(selectedCue.id) },
+                            onPreview = {
+                                playing = false
+                                viewModel.previewDubberV2Cue(selectedCue.id)
+                            }
+                        )
+                    }
+                }
+
+                item(key = "lockrow") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val lockedCount = cues.count { it.locked }
+                        val pinnedCount = cues.count { it.voicePinned }
+                        Text(
+                            "🔒 $lockedCount locked · 📌 $pinnedCount pinned",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedButton(
+                            onClick = { viewModel.setAllDubberV2CuesLocked(true) },
+                            enabled = !rendering && lockedCount < cues.size,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.height(30.dp)
+                        ) { Text("Lock all", fontSize = 11.sp) }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        OutlinedButton(
+                            onClick = { viewModel.setAllDubberV2CuesLocked(false) },
+                            enabled = !rendering && lockedCount > 0,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.height(30.dp)
+                        ) { Text("Unlock", fontSize = 11.sp) }
+                    }
+                }
+
                 itemsIndexed(cues, key = { _, cue -> cue.id }) { index, cue ->
                     val active = index == activeIndex
                     val selected = cue.id == selectedId
@@ -483,18 +557,10 @@ fun DubberV2Screen(viewModel: DocumentViewModel) {
                                     modifier = Modifier.weight(1f, fill = false)
                                 )
                                 if (cue.locked) {
-                                    Text(
-                                        " 🔒",
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
+                                    Text(" 🔒", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
                                 }
                                 if (cue.voicePinned) {
-                                    Text(
-                                        " 📌",
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
+                                    Text(" 📌", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
                                 }
                                 Spacer(modifier = Modifier.weight(1f))
                                 IconButton(
@@ -505,7 +571,8 @@ fun DubberV2Screen(viewModel: DocumentViewModel) {
                                     Icon(
                                         if (cue.locked) Icons.Outlined.Lock else Icons.Outlined.LockOpen,
                                         contentDescription = if (cue.locked) "Unlock block" else "Lock block",
-                                        tint = if (cue.locked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        tint = if (cue.locked) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.size(15.dp)
                                     )
                                 }
@@ -518,7 +585,8 @@ fun DubberV2Screen(viewModel: DocumentViewModel) {
                                 )
                             }
                             Text(
-                                text = if (active) highlightedCue(cue, positionMs, MaterialTheme.colorScheme.primary) else AnnotatedString(cue.text),
+                                text = if (active) highlightedCue(cue, positionMs, MaterialTheme.colorScheme.primary)
+                                else AnnotatedString(cue.text),
                                 fontSize = 13.sp,
                                 maxLines = 3,
                                 overflow = TextOverflow.Ellipsis,
@@ -530,6 +598,7 @@ fun DubberV2Screen(viewModel: DocumentViewModel) {
             }
         }
 
+        // ───────────────────────── pinned action bar ─────────────────────────
         Surface(tonalElevation = 3.dp) {
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 if (rendering) {
@@ -545,45 +614,68 @@ fun DubberV2Screen(viewModel: DocumentViewModel) {
                     }
                     Text(progress, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Original", fontSize = 10.sp, modifier = Modifier.width(54.dp))
-                    Slider(
-                        value = videoVolume,
-                        onValueChange = { viewModel.setDubberV2VideoVolume(it) },
-                        enabled = !rendering,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text("Voice", fontSize = 10.sp, modifier = Modifier.width(36.dp))
-                    Slider(
-                        value = (ttsVolume / 2f).coerceIn(0f, 1f),
-                        onValueChange = { viewModel.setDubberV2TtsVolume(it * 2f) },
-                        enabled = !rendering,
-                        modifier = Modifier.weight(1f)
-                    )
+
+                if (mixerOpen) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Original", fontSize = 10.sp, modifier = Modifier.width(54.dp))
+                        Slider(
+                            value = videoVolume,
+                            onValueChange = { viewModel.setDubberV2VideoVolume(it) },
+                            enabled = !rendering,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text("Voice", fontSize = 10.sp, modifier = Modifier.width(36.dp))
+                        Slider(
+                            value = (ttsVolume / 2f).coerceIn(0f, 1f),
+                            onValueChange = { viewModel.setDubberV2TtsVolume(it * 2f) },
+                            enabled = !rendering,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { audioPicker.launch("audio/*") },
+                            enabled = videoFile != null && !rendering,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) { Text("🎵 Attach audio", fontSize = 11.sp) }
+                        Text(
+                            "Video ${(videoVolume * 100).toInt()}% · new audio ${(ttsVolume * 100).toInt()}%",
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-                OutlinedButton(
-                    onClick = { audioPicker.launch("audio/*") },
-                    enabled = videoFile != null && !rendering,
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Attach audio", fontSize = 12.sp) }
-                Text(
-                    "One step: adds your MP3 or WAV onto this video. Video sound ${(videoVolume * 100).toInt()}%, new audio ${(ttsVolume * 100).toInt()}%.",
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(
+                        onClick = { mixerOpen = !mixerOpen },
+                        enabled = !rendering,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.height(40.dp)
+                    ) {
+                        Icon(
+                            Icons.Outlined.Tune,
+                            contentDescription = "Mix settings",
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                     OutlinedButton(
                         onClick = { viewModel.saveDubberV2Srt() },
                         enabled = cues.isNotEmpty() && !rendering,
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Save SRT", fontSize = 12.sp) }
+                        contentPadding = PaddingValues(horizontal = 8.dp),
+                        modifier = Modifier.weight(1f).height(40.dp)
+                    ) { Text("Save SRT", fontSize = 11.sp, maxLines = 1) }
                     Button(
                         onClick = {
                             playing = false
                             viewModel.renderDubberV2()
                         },
                         enabled = videoFile != null && cues.isNotEmpty() && !rendering,
-                        modifier = Modifier.weight(1.4f)
+                        modifier = Modifier.weight(1.5f).height(40.dp)
                     ) {
                         if (rendering) {
                             CircularProgressIndicator(
@@ -594,7 +686,7 @@ fun DubberV2Screen(viewModel: DocumentViewModel) {
                         } else {
                             Icon(Icons.Rounded.RecordVoiceOver, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Render dub", fontSize = 12.sp)
+                            Text("Render dub", fontSize = 12.sp, maxLines = 1)
                         }
                     }
                     if (output != null) {
@@ -602,6 +694,15 @@ fun DubberV2Screen(viewModel: DocumentViewModel) {
                             Icon(Icons.Rounded.Share, contentDescription = "Share dubbed video")
                         }
                     }
+                }
+                if (!rendering && (videoFile == null || cues.isEmpty())) {
+                    Text(
+                        if (videoFile == null) "🎬 ভিডিও দিন, তারপর ▶ Render dub চাপুন"
+                        else "📝 সাবটাইটেল দিন — ব্লকগুলোই ডাব হবে",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
                 }
             }
         }
@@ -612,6 +713,16 @@ fun DubberV2Screen(viewModel: DocumentViewModel) {
         BlockVoiceDialog(
             voices = voices,
             selectedVoiceId = voiceCue.voiceName,
+            presets = presets,
+            activePresetId = activePresetId,
+            onUsePreset = { preset ->
+                viewModel.setActiveVoicePreset(preset.id)
+                voiceTargetId = null
+            },
+            onSavePreset = { voice ->
+                voiceTargetId = null
+                savePresetFor = voice
+            },
             onPreview = { viewModel.previewVoice(it) },
             onThisBlock = {
                 viewModel.updateDubberV2CueVoice(voiceCue.id, it, pin = true)
@@ -626,6 +737,38 @@ fun DubberV2Screen(viewModel: DocumentViewModel) {
                 voiceTargetId = null
             },
             onDismiss = { voiceTargetId = null }
+        )
+    }
+
+    if (presetManagerOpen) {
+        VoicePresetManagerDialog(
+            presets = presets,
+            activePresetId = activePresetId,
+            voiceLabelOf = { id -> voiceLabel(id, voices) },
+            onApply = { preset ->
+                viewModel.setActiveVoicePreset(preset.id)
+                presetManagerOpen = false
+            },
+            onRename = { preset, name -> viewModel.renameVoicePreset(preset.id, name) },
+            onDelete = { preset -> viewModel.deleteVoicePreset(preset.id) },
+            onClearActive = {
+                viewModel.setActiveVoicePreset(null)
+                presetManagerOpen = false
+            },
+            onDismiss = { presetManagerOpen = false }
+        )
+    }
+
+    val presetVoice = savePresetFor
+    if (presetVoice != null) {
+        SaveVoicePresetDialog(
+            voice = presetVoice,
+            existing = presets.firstOrNull { it.voiceId == presetVoice.id },
+            onSave = { name ->
+                viewModel.saveVoicePreset(name, presetVoice.id)
+                savePresetFor = null
+            },
+            onDismiss = { savePresetFor = null }
         )
     }
 }
@@ -698,6 +841,10 @@ private fun CueEditor(
 private fun BlockVoiceDialog(
     voices: List<FriendlyVoice>,
     selectedVoiceId: String?,
+    presets: List<VoicePreset>,
+    activePresetId: String?,
+    onUsePreset: (VoicePreset) -> Unit,
+    onSavePreset: (FriendlyVoice) -> Unit,
     onPreview: (FriendlyVoice) -> Unit,
     onThisBlock: (String) -> Unit,
     onAllExceptPinned: (String) -> Unit,
@@ -736,6 +883,26 @@ private fun BlockVoiceDialog(
                     }
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+                if (presets.isNotEmpty()) {
+                    Text(
+                        "⭐ Saved voices — one tap locks it on every block",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        presets.forEach { preset ->
+                            FilterChip(
+                                selected = preset.id == activePresetId,
+                                onClick = { onUsePreset(preset) },
+                                label = { Text("⭐ ${preset.name}", fontSize = 11.sp, maxLines = 1) }
+                            )
+                        }
                     }
                 }
                 OutlinedTextField(
@@ -791,7 +958,7 @@ private fun BlockVoiceDialog(
                 }
                 if (filtered.isEmpty()) {
                     Text(
-                        "Preparing the voices… first launch copies the bundled models (a minute or two). This list fills in by itself.",
+                        "Preparing the voices… this fills in by itself in a moment.",
                         fontSize = 12.sp,
                         modifier = Modifier.padding(vertical = 8.dp)
                     )
@@ -820,6 +987,20 @@ private fun BlockVoiceDialog(
                         contentPadding = PaddingValues(horizontal = 8.dp),
                         modifier = Modifier.weight(1.3f)
                     ) { Text("This block 📌", fontSize = 11.sp, maxLines = 1) }
+                }
+                val pendingVoice = voices.firstOrNull { it.id == pending }
+                OutlinedButton(
+                    onClick = { pendingVoice?.let(onSavePreset) },
+                    enabled = pendingVoice != null,
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                ) {
+                    Text(
+                        if (pendingVoice == null) "⭐ Save this voice…"
+                        else "⭐ Save “${pendingVoice.displayName}” for one-tap reuse",
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }
@@ -868,5 +1049,186 @@ private fun formatReviewTime(ms: Long): String {
         "%d:%02d:%02d.%03d".format(hours, minutes, seconds, millis)
     } else {
         "%02d:%02d.%03d".format(minutes, seconds, millis)
+    }
+}
+
+/**
+ * Saved voices ("locked" voices). Pick a character in the picker, save it here once, and
+ * from then on it is one tap — for every block of this video and for the next video too.
+ */
+@Composable
+private fun VoicePresetManagerDialog(
+    presets: List<VoicePreset>,
+    activePresetId: String?,
+    voiceLabelOf: (String) -> String,
+    onApply: (VoicePreset) -> Unit,
+    onRename: (VoicePreset, String) -> Unit,
+    onDelete: (VoicePreset) -> Unit,
+    onClearActive: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var renamingId by remember { mutableStateOf<String?>(null) }
+    var renameDraft by remember { mutableStateOf("") }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().heightIn(max = 540.dp),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("⭐ Saved voices", fontWeight = FontWeight.Bold)
+                        Text(
+                            "Save a character once. After that one tap locks that voice on every block — and every new video starts with it.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+
+                if (presets.isEmpty()) {
+                    Text(
+                        "Nothing saved yet.\n\nOpen any block → change voice → pick a character → “⭐ Save … for one-tap reuse”.",
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items(presets, key = { it.id }) { preset ->
+                            val isActive = preset.id == activePresetId
+                            Surface(
+                                onClick = { onApply(preset) },
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isActive) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (renamingId == preset.id) {
+                                        OutlinedTextField(
+                                            value = renameDraft,
+                                            onValueChange = { renameDraft = it },
+                                            singleLine = true,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        TextButton(onClick = {
+                                            onRename(preset, renameDraft)
+                                            renamingId = null
+                                        }) { Text("OK", fontSize = 11.sp) }
+                                    } else {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                (if (isActive) "🎙 " else "⭐ ") + preset.name,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                voiceLabelOf(preset.voiceId) +
+                                                    if (isActive) " · active" else "",
+                                                fontSize = 11.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                        IconButton(
+                                            onClick = {
+                                                renamingId = preset.id
+                                                renameDraft = preset.name
+                                            },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Outlined.Edit,
+                                                contentDescription = "Rename",
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        IconButton(
+                                            onClick = { onDelete(preset) },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Outlined.Delete,
+                                                contentDescription = "Delete",
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (activePresetId != null) {
+                    TextButton(onClick = onClearActive) {
+                        Text("Turn the lock off — go back to automatic detection", fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Asks for a name before a voice becomes a one-tap preset. */
+@Composable
+private fun SaveVoicePresetDialog(
+    voice: FriendlyVoice,
+    existing: VoicePreset?,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var name by remember(voice.id) { mutableStateOf(existing?.name ?: voice.displayName) }
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    if (existing == null) "⭐ Save this voice" else "⭐ Update this voice",
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "${voice.displayName} · ${voice.languageGroup}",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    singleLine = true,
+                    label = { Text("Name it") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    "Saved voices appear as ⭐ chips in the voice picker and in the Dubber V2 header — one tap applies the voice to every block, and the next video starts with it. You can rename or delete it any time under “Change”.",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancel", fontSize = 12.sp) }
+                    Button(
+                        onClick = { onSave(name) },
+                        enabled = name.isNotBlank(),
+                        modifier = Modifier.weight(1.3f)
+                    ) { Text(if (existing == null) "Save & lock" else "Update & lock", fontSize = 12.sp) }
+                }
+            }
+        }
     }
 }
