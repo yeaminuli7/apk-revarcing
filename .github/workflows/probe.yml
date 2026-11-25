@@ -1,0 +1,29 @@
+name: Probe build
+on:
+  push:
+    paths: ['.github/workflows/probe.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Build and report
+        run: |
+          chmod +x gradlew
+          keytool -genkeypair -v -keystore app/KuatoDev.jks -storepass antigravity -keypass antigravity \
+            -alias antigravity -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=A, OU=A, O=A, L=NA, S=NA, C=US" > /dev/null 2>&1
+          export SIGNING_STORE_PASSWORD=antigravity SIGNING_KEY_ALIAS=antigravity SIGNING_KEY_PASSWORD=antigravity
+          ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace > build-out.txt 2>&1 || true
+          echo "BUILD EXIT: $?"
+          EXCERPT=$(grep -iE "^(e: |w: .*(deprecat|unused))|error:|exception:|What went wrong|Caused by|FAILURE|Execution failed" build-out.txt | head -c 3000 || true)
+          printf 'probe: %s\n\n%s\n' "$(date -u)" "$EXCERPT" > .probe-msg
