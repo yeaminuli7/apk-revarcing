@@ -35,13 +35,18 @@ jobs:
           git config user.name "probe-bot"
           git config user.email "probe@example.com"
           EXCERPT=$(grep -iE "error:|error |What went wrong|Caused by:|FAILURE:|Execution failed|^e: " build-out.txt | head -n 40 | cut -c1-250)
+          cp build-out.txt .probe-full-log.txt
+          grep -E "^e: " build-out.txt | sed -E 's#file:///[^ ]*/app/src/#app/src/#' | sort -u > errors.txt
+          echo "errors: $(wc -l < errors.txt)"
           {
             echo "probe-report"
             echo
             echo '```'
             echo "$EXCERPT"
             echo '```'
+            echo
+            echo "full errors: $(wc -l < errors.txt)"
           } > .probe-report.md
-          git add -f .probe-report.md
+          git add -f .probe-report.md errors.txt
           git commit -m "probe: build output excerpt" -q
           git push origin "HEAD:${GITHUB_REF_NAME}" -q
