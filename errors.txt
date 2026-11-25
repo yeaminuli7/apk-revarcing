@@ -1,10 +1,6 @@
-e: app/src/main/kotlin/id/vern/antigravity/accessibility/ScreenControlService.kt:16:35 Unresolved reference 'AccessibilityServiceInfo'.
-e: app/src/main/kotlin/id/vern/antigravity/accessibility/ScreenControlService.kt:243:50 Unresolved reference 'EXTRA_SETTINGS'.
-e: app/src/main/kotlin/id/vern/antigravity/accessibility/ScreenControlService.kt:293:40 Unresolved reference 'AccessibilityServiceInfo'.
-e: app/src/main/kotlin/id/vern/antigravity/accessibility/ScreenControlService.kt:343:40 Unresolved reference 'AccessibilityServiceInfo'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/AccessibilityDialog.kt:76:6 Syntax error: Expecting ')'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/ApiKeyDialog.kt:40:46 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/ApiKeyDialog.kt:81:6 Syntax error: Expecting ')'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ApiKeyScreen.kt:82:46 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ApiKeyScreen.kt:89:42 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/SettingsScreen.kt:5577:2 Syntax error: Expecting '}'.
+e: app/src/main/kotlin/id/vern/antigravity/accessibility/ScreenControlService.kt:291:40 Unresolved reference 'AccessibilityServiceInfo'.
+e: app/src/main/kotlin/id/vern/antigravity/accessibility/ScreenControlService.kt:341:40 Unresolved reference 'AccessibilityServiceInfo'.
+e: app/src/main/kotlin/id/vern/antigravity/ui/components/AccessibilityDialog.kt:76:5 Syntax error: Expecting an element.
+e: app/src/main/kotlin/id/vern/antigravity/ui/components/AccessibilityDialog.kt:77:6 Syntax error: Expecting ')'.
+e: app/src/main/kotlin/id/vern/antigravity/ui/components/ApiKeyDialog.kt:79:5 Syntax error: Expecting an element.
+e: app/src/main/kotlin/id/vern/antigravity/ui/components/ApiKeyDialog.kt:80:6 Syntax error: Expecting ')'.
