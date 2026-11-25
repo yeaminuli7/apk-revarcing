@@ -75,7 +75,7 @@ fun ApiKeyDialog(
                     color = MaterialTheme.colorScheme.primary
                 )
             }
+            }
         }
     )
-    }
 }

@@ -288,7 +288,7 @@ class ScreenControlService : AccessibilityService() {
         val manager = context.getSystemService(Context.ACCESSIBILITY_SERVICE)
             as android.view.accessibility.AccessibilityManager
         val services = manager.getEnabledAccessibilityServiceList(
-            android.view.accessibility.AccessibilityServiceInfo.FEEDBACK_ALL_MASK
+            android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK
         )
         return services.any { it.id == "${context.packageName}/${ScreenControlService::class.java.name}" }
     }
@@ -338,7 +338,7 @@ object AccessibilityHelper {
         val manager = context.getSystemService(Context.ACCESSIBILITY_SERVICE)
             as android.view.accessibility.AccessibilityManager
         val services = manager.getEnabledAccessibilityServiceList(
-            android.view.accessibility.AccessibilityServiceInfo.FEEDBACK_ALL_MASK
+            android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK
         )
         val packageName = context.packageName
         return services.any { it.id?.startsWith(packageName) == true }
