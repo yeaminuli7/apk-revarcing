@@ -99,7 +99,15 @@ jobs:
         if: always()
         run: |
           mkdir -p dist
-          find app/build/outputs/apk -name '*.apk' -exec cp -v {} dist/ \; || true
+          VERSION=$(grep -oE 'versionName = "[^"]+"' app/build.gradle.kts | head -1 | cut -d'"' -f2)
+          VERSION=${VERSION:-1.0.0}
+          find app/build/outputs/apk -name '*.apk' | while read -r apk; do
+            case "$apk" in
+              *release*) cp -v "$apk" "dist/Antigravity-${VERSION}-release.apk" ;;
+              *debug*)   cp -v "$apk" "dist/Antigravity-${VERSION}-debug.apk" ;;
+              *)         cp -v "$apk" dist/ ;;
+            esac
+          done || true
           for f in dist/*.apk; do
             [ -e "$f" ] || continue
             echo "== $f"
