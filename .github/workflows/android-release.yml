@@ -35,8 +35,17 @@ jobs:
           set -e
           SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
           echo "SDK=$SDK"
-          yes 2>/dev/null | "${SDK}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
-          "${SDK}/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-36" "build-tools;36.0.0" > /dev/null
+          SDKMGR="$(ls "${SDK}"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -n1)"
+          if [ -z "$SDKMGR" ]; then
+            yes 2>/dev/null | "${SDK}/tools/bin/sdkmanager" --licenses > /dev/null || true
+            SDKMGR="${SDK}/tools/bin/sdkmanager"
+          fi
+          echo "sdkmanager=$SDKMGR"
+          yes 2>/dev/null | "$SDKMGR" --licenses > /dev/null || true
+          "$SDKMGR" "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
 
       - name: Configure signing
         env:
@@ -81,16 +90,6 @@ jobs:
             ls -lh "$f"
           done
 
-      - name: Upload build log on failure
-        if: failure()
-        run: |
-          tail -n 400 build-log.txt > build-log-tail.txt || true
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f build-log-tail.txt
-          git commit -m "ci: build log from failed run ${{ github.run_number }} [skip ci]" || true
-          git push origin "HEAD:${GITHUB_REF_NAME}" || true
-
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -98,6 +97,22 @@ jobs:
           path: dist/*.apk
           if-no-files-found: warn
           retention-days: 30
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "### Build result: ${{ job.status }}"
+            echo
+            if [ -f build-log.txt ]; then
+              echo '<details><summary>Gradle error excerpts</summary>'
+              echo
+              echo '```'
+              grep -iE "^(> Task|FAILURE|e: |What went wrong|Caused by|error:|Execution failed)" build-log.txt | tail -n 80
+              echo '```'
+              echo '</details>'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish release
         if: success()
