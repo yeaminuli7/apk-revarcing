@@ -8,5 +8,5 @@
     android:accessibilityFlags="flagReportViewIds"
     android:notificationTimeout="100"
     android:packageNames="id.vern.antigravity"
-    android:feedbackType="feedbackGeneric"
+    android:accessibilityFeedbackType="feedbackGeneric"
     />
