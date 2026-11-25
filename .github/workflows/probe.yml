@@ -16,14 +16,29 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Build and report
+      - name: Build
         run: |
           chmod +x gradlew
           keytool -genkeypair -v -keystore app/KuatoDev.jks -storepass antigravity -keypass antigravity \
             -alias antigravity -keyalg RSA -keysize 2048 -validity 10000 \
             -dname "CN=A, OU=A, O=A, L=NA, S=NA, C=US" > /dev/null 2>&1
           export SIGNING_STORE_PASSWORD=antigravity SIGNING_KEY_ALIAS=antigravity SIGNING_KEY_PASSWORD=antigravity
-          ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace > build-out.txt 2>&1 || true
-          echo "BUILD EXIT: $?"
-          EXCERPT=$(grep -iE "^(e: |w: .*(deprecat|unused))|error:|exception:|What went wrong|Caused by|FAILURE|Execution failed" build-out.txt | head -c 3000 || true)
-          printf 'probe: %s\n\n%s\n' "$(date -u)" "$EXCERPT" > .probe-msg
+          set +e
+          ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace > build-out.txt 2>&1
+          echo "exit=$?"
+      - name: Report via commit message
+        if: always()
+        run: |
+          git config user.name "probe-bot"
+          git config user.email "probe@example.com"
+          EXCERPT=$(grep -iE "error:|error |What went wrong|Caused by:|FAILURE:|Execution failed|^e: " build-out.txt | head -n 40 | cut -c1-250)
+          {
+            echo "probe-report"
+            echo
+            echo '```'
+            echo "$EXCERPT"
+            echo '```'
+          } > .probe-report.md
+          git add -f .probe-report.md
+          git commit -m "probe: build output excerpt" -q
+          git push origin "HEAD:${GITHUB_REF_NAME}" -q
