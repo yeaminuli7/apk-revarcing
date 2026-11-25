@@ -16,3 +16,5 @@ gradle.local.properties
 # Build reports
 build-log*.txt
 dist/
+build-log-tail.txt
+build-log.txt
