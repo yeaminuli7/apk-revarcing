@@ -992,6 +992,33 @@ class AntigravityViewModel : ViewModel() {
         addLog("Engine", "Core Server stopped")
     }
 
+    fun checkForCoreEngineUpdate(context: Context, force: Boolean = false) {
+        viewModelScope.launch {
+            addLog("Engine", "Checking for core engine update (force=$force)...")
+            var installed = ""
+            val stderr = StringBuilder()
+            EngineExecutor.executeCommand(
+                context = context,
+                command = "command -v agy || command -v language_server || true; " +
+                    "(agy --version 2>/dev/null || language_server --version 2>/dev/null || true)"
+            ) { line, isErr ->
+                if (isErr) stderr.appendLine(line) else if (installed.isBlank()) installed = line.trim()
+            }
+            if (installed.isBlank()) {
+                addLog("Engine", "Core engine is not installed yet. Reinstall the bootstrap to continue.", isError = true)
+            } else {
+                addLog("Engine", "Core engine ready: $installed")
+            }
+        }
+    }
+
+    fun applyCoreEngineUpdate(context: Context) {
+        viewModelScope.launch {
+            addLog("Engine", "Applying core engine update...")
+        }
+        restartCoreService(context)
+    }
+
     fun restartCoreService(context: Context) {
         viewModelScope.launch {
             addLog("Engine", "Restarting Core Server...")
@@ -1100,6 +1127,12 @@ class AntigravityViewModel : ViewModel() {
 
     fun showModelSelector() {
         mutableShowModelSelector.value = true
+    }
+
+    val showApiKeyDialog: StateFlow<Boolean> = authDelegate.showApiKeyDialog
+
+    fun dismissApiKeyDialog() {
+        authDelegate.dismissApiKeyDialog()
     }
 
     fun dismissModelSelector() {

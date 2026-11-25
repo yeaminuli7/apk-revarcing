@@ -28,9 +28,6 @@ fun ApiKeyDialog(
         title = {
             Text(text = stringResource(R.string.api_key_title))
         },
-        text = {
-            Text(text = stringResource(R.string.api_key_dialog_desc))
-        },
         confirmButton = {
             if (isLoading) {
                 CircularProgressIndicator(modifier = Modifier.size(20.dp))
@@ -57,8 +54,8 @@ fun ApiKeyDialog(
             TextButton(onClick = { onDismissRequest() }) {
                 Text(stringResource(R.string.common_cancel))
             }
-        }
-    ) {
+        },
+        text = {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

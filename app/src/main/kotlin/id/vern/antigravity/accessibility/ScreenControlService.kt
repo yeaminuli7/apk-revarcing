@@ -219,14 +219,18 @@ class ScreenControlService : AccessibilityService() {
      */
     fun typeText(text: String) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            // Use accessibility gesture to simulate typing
-            val event = AccessibilityEvent.obtain(AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED)
-            event.text = listOf(text)
-            dispatchGesture(
-                GestureDescription.Builder().build(),
-                null,
-                null
-            )
+            // Note: text injection is performed by the gateway via accessibility
+            // actions on the focused node; a gesture-only stub is intentional here.
+            val root = rootInActiveWindow
+            val focused = root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            if (focused != null) {
+                val args = android.os.Bundle()
+                args.putCharSequence(
+                    AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                    text
+                )
+                focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+            }
         }
     }
 

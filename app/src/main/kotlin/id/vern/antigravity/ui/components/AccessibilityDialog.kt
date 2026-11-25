@@ -35,9 +35,6 @@ fun AccessibilityDialog(
         title = {
             Text(text = stringResource(R.string.accessibility_permission_title))
         },
-        text = {
-            Text(text = stringResource(R.string.accessibility_permission_desc))
-        },
         confirmButton = {
             TextButton(
                 onClick = {
@@ -53,8 +50,8 @@ fun AccessibilityDialog(
             TextButton(onClick = { onSkip() }) {
                 Text(stringResource(R.string.accessibility_btn_skip))
             }
-        }
-    ) {
+        },
+        text = {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

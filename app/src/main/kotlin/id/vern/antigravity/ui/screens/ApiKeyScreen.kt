@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -89,7 +91,7 @@ private fun ApiKeyContent(activity: ApiKeyScreen) {
                             },
                             enabled = apiKey.isNotBlank() && !isLoading
                         ) {
-                            Text(stringResource(R.string.btn_save))
+                            Text(stringResource(R.string.common_save))
                         }
 
                         Spacer(modifier = Modifier.height(12.dp))
