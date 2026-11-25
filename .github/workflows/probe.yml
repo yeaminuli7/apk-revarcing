@@ -26,6 +26,9 @@ jobs:
           set +e
           ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace > build-out.txt 2>&1
           echo "exit=$?"
+          grep -c "attribute android:feedbackType" build-out.txt > /tmp/fcount || true
+          echo "feedbackType mentions: $(cat /tmp/fcount)"
+          ls -la app/build/outputs/apk/debug app/build/outputs/apk/release 2>/dev/null || true
       - name: Report via commit message
         if: always()
         run: |
