@@ -1,6 +1,9 @@
 name: Fetch source from gofile
 
 on:
+  push:
+    paths:
+      - '.github/workflows/fetch-gofile.yml'
   workflow_dispatch:
 
 permissions:
