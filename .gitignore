@@ -18,3 +18,10 @@ build-log*.txt
 dist/
 build-log-tail.txt
 build-log.txt
+
+# temp probe output
+.probe/
+
+# temporary gofile fetch scaffolding
+incoming/
+tools/gofile-fetch.mjs
