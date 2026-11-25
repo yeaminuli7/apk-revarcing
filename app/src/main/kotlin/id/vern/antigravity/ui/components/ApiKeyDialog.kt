@@ -22,6 +22,7 @@ fun ApiKeyDialog(
 ) {
     var apiKey by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
@@ -36,10 +37,7 @@ fun ApiKeyDialog(
                     onClick = {
                         if (apiKey.isNotBlank()) {
                             isLoading = true
-                            GeminiClient.saveApiKey(
-                                LocalContext.current,
-                                apiKey
-                            )
+                            GeminiClient.saveApiKey(context, apiKey)
                             isLoading = false
                             onSave(apiKey)
                         }
@@ -78,5 +76,6 @@ fun ApiKeyDialog(
                 )
             }
         }
+    )
     }
 }

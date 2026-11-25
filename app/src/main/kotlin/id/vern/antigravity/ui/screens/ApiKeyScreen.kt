@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import id.vern.antigravity.R
@@ -36,6 +37,8 @@ private fun ApiKeyContent(activity: ApiKeyScreen) {
     var status by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var navigateToMain by remember { mutableStateOf(false) }
+    val blankError = stringResource(R.string.api_key_empty_error)
+    val savedText = stringResource(R.string.api_key_saved)
 
     AntigravityTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -79,14 +82,14 @@ private fun ApiKeyContent(activity: ApiKeyScreen) {
                         Button(
                             onClick = {
                                 if (apiKey.isBlank()) {
-                                    status = stringResource(R.string.api_key_empty_error)
+                                    status = blankError
                                     return@Button
                                 }
                                 isLoading = true
                                 status = null
-                                GeminiClient.saveApiKey(activity, apiKey)
+                                activity?.let { GeminiClient.saveApiKey(it, apiKey) }
                                 isLoading = false
-                                status = stringResource(R.string.api_key_saved)
+                                status = savedText
                                 navigateToMain = true
                             },
                             enabled = apiKey.isNotBlank() && !isLoading
@@ -96,7 +99,7 @@ private fun ApiKeyContent(activity: ApiKeyScreen) {
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        if (GeminiClient.hasApiKey(activity)) {
+                        if (LocalContext.current.let { GeminiClient.hasApiKey(it) }) {
                             TextButton(
                                 onClick = {
                                     navigateToMain = true

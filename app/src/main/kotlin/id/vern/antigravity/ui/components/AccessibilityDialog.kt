@@ -73,5 +73,6 @@ fun AccessibilityDialog(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    )
     }
 }

@@ -13,7 +13,6 @@ import android.os.Looper
 import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import android.view.accessibility.AccessibilityServiceInfo
 import android.graphics.Path
 import id.vern.antigravity.util.AppLogger
 import kotlinx.coroutines.CoroutineScope
@@ -238,9 +237,8 @@ class ScreenControlService : AccessibilityService() {
      * Navigate to system settings (e.g., battery saver).
      */
     fun openSettings(settingAction: String? = null) {
-        val intent = Intent(Settings.ACTION_SETTINGS).apply {
+        val intent = Intent(settingAction ?: Settings.ACTION_SETTINGS).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            settingAction?.let { putExtra(Intent.EXTRA_SETTINGS, it) }
         }
         startActivity(intent)
     }
