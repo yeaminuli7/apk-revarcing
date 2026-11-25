@@ -1,0 +1,3 @@
+#!/system/bin/sh
+# apt-config / apt-key / apt-mark safe compatibility stub
+exit 0

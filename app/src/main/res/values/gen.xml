@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <integer name="https_server_port">45158</integer>
+    <integer name="gateway_port">45161</integer>
+    <string name="oauth_scheme">antigravity</string>
+</resources>
+

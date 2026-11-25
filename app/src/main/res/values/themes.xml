@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Antigravity" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    </style>
+
+    <style name="SplashTheme" parent="@style/AppTheme">
+        <item name="android:windowBackground">@drawable/splash_background</item>
+    </style>
+
+    <style name="SplashThemeDark" parent="@style/AppTheme">
+        <item name="android:windowBackground">@color/splash_bg_dark</item>
+    </style>
+    <style name="SplashThemeLight" parent="@style/AppTheme">
+        <item name="android:windowBackground">@color/splash_bg_light</item>
+    </style>
+</resources>
+
