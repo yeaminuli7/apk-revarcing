@@ -1,6 +1,0 @@
-e: app/src/main/kotlin/id/vern/antigravity/accessibility/ScreenControlService.kt:291:40 Unresolved reference 'AccessibilityServiceInfo'.
-e: app/src/main/kotlin/id/vern/antigravity/accessibility/ScreenControlService.kt:341:40 Unresolved reference 'AccessibilityServiceInfo'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/AccessibilityDialog.kt:76:5 Syntax error: Expecting an element.
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/AccessibilityDialog.kt:77:6 Syntax error: Expecting ')'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/ApiKeyDialog.kt:79:5 Syntax error: Expecting an element.
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/ApiKeyDialog.kt:80:6 Syntax error: Expecting ')'.

@@ -72,11 +72,11 @@ jobs:
             echo "SIGNING_KEY_PASSWORD=antigravity" >> "$GITHUB_ENV"
           fi
 
-      - name: Build APKs
+      - name: Build release APK
         run: |
           set -o pipefail
           chmod +x gradlew
-          ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace 2>&1 | tee build-log.txt
+          ./gradlew :app:assembleRelease --stacktrace 2>&1 | tee build-log.txt
 
       - name: Dump compile errors
         if: failure()
