@@ -85,6 +85,8 @@ fun WorkspaceScreen(
 ) {
     val context = LocalContext.current
     var activeView by remember { mutableStateOf(ActiveToolView.CHAT) }
+    val projects by viewModel.projectList.collectAsStateWithLifecycle()
+    val activeWorkspace by viewModel.workspacePath.collectAsStateWithLifecycle()
     val appearance by viewModel.appearanceConfig.collectAsStateWithLifecycle()
     val selectedModel by viewModel.selectedModel.collectAsStateWithLifecycle()
     val thinkingBudget by viewModel.thinkingBudget.collectAsStateWithLifecycle()
@@ -101,16 +103,16 @@ fun WorkspaceScreen(
     // first launch so the chat/editor have a valid working directory.
     LaunchedEffect(Unit) {
         runCatching {
-            if (viewModel.projectList.value.isEmpty()) {
+            if (projects.isEmpty()) {
                 val base = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
                     ?: Environment.getExternalStorageDirectory()
                 val defaultDir = File(base, "Antigravity")
                 viewModel.addProject(context, defaultDir.absolutePath)
-                if (viewModel.workspacePath.value.isBlank()) {
+                if (activeWorkspace.isBlank()) {
                     viewModel.setWorkspacePath(context, defaultDir.absolutePath)
                 }
-            } else if (viewModel.workspacePath.value.isBlank()) {
-                viewModel.setWorkspacePath(context, viewModel.projectList.value.first().absolutePath)
+            } else if (activeWorkspace.isBlank()) {
+                viewModel.setWorkspacePath(context, projects.first().absolutePath)
             }
         }
     }
