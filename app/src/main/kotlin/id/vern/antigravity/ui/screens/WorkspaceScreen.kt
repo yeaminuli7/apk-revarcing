@@ -42,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -95,6 +96,24 @@ fun WorkspaceScreen(
 
     val openTabs by viewModel.openEditorTabs.collectAsStateWithLifecycle()
     val activeTabId by viewModel.activeEditorTabId.collectAsStateWithLifecycle()
+
+    // Never leave the user with an empty workspace: seed a default project on
+    // first launch so the chat/editor have a valid working directory.
+    LaunchedEffect(Unit) {
+        runCatching {
+            if (viewModel.projectList.value.isEmpty()) {
+                val base = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+                    ?: Environment.getExternalStorageDirectory()
+                val defaultDir = File(base, "Antigravity")
+                viewModel.addProject(context, defaultDir.absolutePath)
+                if (viewModel.workspacePath.value.isBlank()) {
+                    viewModel.setWorkspacePath(context, defaultDir.absolutePath)
+                }
+            } else if (viewModel.workspacePath.value.isBlank()) {
+                viewModel.setWorkspacePath(context, viewModel.projectList.value.first().absolutePath)
+            }
+        }
+    }
 
     val rootDir = remember {
         val docs = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)

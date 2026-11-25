@@ -307,6 +307,10 @@
     <string name="api_key_empty_error">দয়া করে API কি লিখুন</string>
     <string name="api_key_saved">API কি সেভ করা হয়েছে!</string>
     <string name="api_key_continue">এগিয়ে যান</string>
+    <string name="api_key_optional_hint">চাইলে এখনই কি ছাড়াই এগিয়ে যেতে পারেন — পরে সেটিংস থেকে যোগ করা যাবে।</string>
+    <string name="api_key_clear">API কি মুছে ফেলুন</string>
+    <string name="splash_boot_stalled">সেটআপ বেশি সময় নিচ্ছে। চাইলে এখনই অ্যাপে ঢুকে পড়তে পারেন — বাকি সেটআপ পরে হবে।</string>
+    <string name="splash_btn_skip_setup">সেটআপ বাদ দিয়ে ঢুকুন</string>
     <string name="api_key_dialog_desc">গুগল AI Studio থেকে আপনার জেমিনি API কি দিয়ে দিন। এটা বিনামূল্য ব্যবহার করার জন্য প্রয়োজন।</string>
 
     <string name="drawer_conversations_title">Conversations</string>

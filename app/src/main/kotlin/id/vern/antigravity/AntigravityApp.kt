@@ -3,6 +3,7 @@ package id.vern.antigravity
 import android.app.ActivityManager
 import android.app.Application
 import android.content.Context
+import android.os.Looper
 import android.os.Process
 import android.util.Log
 import id.vern.antigravity.ui.CrashHandlerActivity
@@ -71,11 +72,26 @@ class AntigravityApp : Application() {
                 prefs.edit().putString("pending_crash_log", crashDetails).commit()
             } catch (e: Exception) {}
 
+            // The crash handler runs in its own process (":crash_handler"), so we
+            // must give it a moment to come up before killing this process.
+            // Sleeping on the UI thread used to freeze the app on a black screen
+            // whenever the crash itself happened on the main thread, so the delay
+            // is skipped in that case and the handler activity is launched first.
             try {
                 CrashHandlerActivity.start(applicationContext, crashDetails)
-                Thread.sleep(1200)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed launching CrashHandlerActivity", e)
+            }
+
+            val onMainThread = thread === Looper.getMainLooper().thread
+            if (!onMainThread) {
+                try {
+                    Thread.sleep(1800)
+                } catch (ignored: InterruptedException) {
+                }
+            } else {
+                // Let the new process attach and draw before this one dies.
+                android.os.SystemClock.sleep(400)
             }
 
             Process.killProcess(Process.myPid())

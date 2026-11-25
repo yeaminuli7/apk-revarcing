@@ -102,11 +102,17 @@ fun SplashScreen(
     var hasTriggeredBoot by remember { mutableStateOf(false) }
 
     var pendingStorageLaunch by remember { mutableStateOf(false) }
+    // A boot that makes no progress for this long is treated as stalled so the
+    // user can never be left staring at a frozen splash screen.
+    var bootStalled by remember { mutableStateOf(false) }
+    var bootStartedAt by remember { mutableStateOf(0L) }
 
     fun triggerEngineBoot() {
         if (!hasTriggeredBoot && PermissionHelper.hasStoragePermission(context)) {
             hasTriggeredBoot = true
             hasStoragePermission = true
+            bootStartedAt = System.currentTimeMillis()
+            bootStalled = false
             viewModel.bootEngine(context) { onNavigateToChat() }
         }
     }
@@ -190,6 +196,15 @@ fun SplashScreen(
         } else {
             hasStoragePermission = true
             triggerEngineBoot()
+        }
+    }
+
+    LaunchedEffect(bootStartedAt, hasTriggeredBoot, setupProgress, bootError) {
+        if (hasTriggeredBoot && bootError == null) {
+            kotlinx.coroutines.delay(90_000)
+            if (hasTriggeredBoot && bootError == null && setupProgress < 1.0f && hasTriggeredBoot) {
+                bootStalled = true
+            }
         }
     }
 
@@ -464,8 +479,30 @@ fun SplashScreen(
                     Text(
                         text = bootStatusText.ifBlank { stringResource(R.string.splash_status_initializing) },
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
                     )
+
+                    if (bootStalled) {
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        Text(
+                            text = stringResource(R.string.splash_boot_stalled),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 18.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedButton(
+                            onClick = { onNavigateToChat() },
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(stringResource(R.string.splash_btn_skip_setup))
+                        }
+                    }
                 }
             }
         }
