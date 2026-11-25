@@ -1,49 +1,10 @@
 e: app/src/main/kotlin/id/vern/antigravity/accessibility/ScreenControlService.kt:16:35 Unresolved reference 'AccessibilityServiceInfo'.
-e: app/src/main/kotlin/id/vern/antigravity/accessibility/ScreenControlService.kt:224:19 'val' cannot be reassigned.
-e: app/src/main/kotlin/id/vern/antigravity/accessibility/ScreenControlService.kt:239:50 Unresolved reference 'EXTRA_SETTINGS'.
-e: app/src/main/kotlin/id/vern/antigravity/accessibility/ScreenControlService.kt:289:40 Unresolved reference 'AccessibilityServiceInfo'.
-e: app/src/main/kotlin/id/vern/antigravity/accessibility/ScreenControlService.kt:339:40 Unresolved reference 'AccessibilityServiceInfo'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/AccessibilityDialog.kt:36:13 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/AccessibilityDialog.kt:36:25 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/AccessibilityDialog.kt:39:13 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/AccessibilityDialog.kt:39:25 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/AccessibilityDialog.kt:42:13 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/AccessibilityDialog.kt:53:13 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/AccessibilityDialog.kt:57:7 Argument type mismatch: actual type is 'kotlin.Function0<kotlin.Unit>', but 'androidx.compose.ui.window.DialogProperties' was expected.
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/AccessibilityDialog.kt:58:9 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/ApiKeyDialog.kt:29:13 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/ApiKeyDialog.kt:29:25 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/ApiKeyDialog.kt:32:13 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/ApiKeyDialog.kt:32:25 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/ApiKeyDialog.kt:36:17 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/ApiKeyDialog.kt:38:17 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/ApiKeyDialog.kt:43:46 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/ApiKeyDialog.kt:57:13 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/ApiKeyDialog.kt:61:7 Argument type mismatch: actual type is 'kotlin.Function0<kotlin.Unit>', but 'androidx.compose.ui.window.DialogProperties' was expected.
-e: app/src/main/kotlin/id/vern/antigravity/ui/components/ApiKeyDialog.kt:62:9 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ApiKeyScreen.kt:49:52 Unresolved reference 'height'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ApiKeyScreen.kt:54:52 Unresolved reference 'height'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ApiKeyScreen.kt:63:49 Unresolved reference 'fillMaxWidth'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ApiKeyScreen.kt:65:52 Unresolved reference 'height'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ApiKeyScreen.kt:74:56 Unresolved reference 'height'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ApiKeyScreen.kt:80:46 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ApiKeyScreen.kt:87:42 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ApiKeyScreen.kt:92:58 Unresolved reference 'btn_save'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ApiKeyScreen.kt:95:52 Unresolved reference 'height'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ChatScreen.kt:1683:44 Unresolved reference 'dismissApiKeyDialog'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ChatScreen.kt:1686:27 Unresolved reference 'dismissApiKeyDialog'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ChatScreen.kt:171:31 Property delegate must have a 'getValue(Nothing?, KProperty0<ERROR CLASS: Cannot infer argument for type parameter T>)' method. None of the following functions is applicable:
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ChatScreen.kt:171:34 Cannot infer type for this parameter. Please specify it explicitly.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ChatScreen.kt:171:44 Unresolved reference 'showApiKeyDialog'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ChatScreen.kt:171:61 Cannot infer type for this parameter. Please specify it explicitly.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/SettingsScreen.kt:3930:22 Cannot infer type for this parameter. Please specify it explicitly.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/SettingsScreen.kt:3930:22 Not enough information to infer type argument for 'T'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/SettingsScreen.kt:3930:33 Cannot infer type for this parameter. Please specify it explicitly.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/SettingsScreen.kt:3930:33 Not enough information to infer type argument for 'T'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/SettingsScreen.kt:3930:48 Unresolved reference 'CoreEngineUiState'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/SettingsScreen.kt:4087:39 Unresolved reference 'isChecking'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/SettingsScreen.kt:4104:43 Unresolved reference 'checkForCoreEngineUpdate'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/SettingsScreen.kt:4106:50 Unresolved reference 'isChecking'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/SettingsScreen.kt:4125:49 Unresolved reference 'isUpdateAvailable'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/SettingsScreen.kt:4132:47 Unresolved reference 'applyCoreEngineUpdate'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/SettingsScreen.kt:5584:2 Syntax error: Expecting '}'.
+e: app/src/main/kotlin/id/vern/antigravity/accessibility/ScreenControlService.kt:243:50 Unresolved reference 'EXTRA_SETTINGS'.
+e: app/src/main/kotlin/id/vern/antigravity/accessibility/ScreenControlService.kt:293:40 Unresolved reference 'AccessibilityServiceInfo'.
+e: app/src/main/kotlin/id/vern/antigravity/accessibility/ScreenControlService.kt:343:40 Unresolved reference 'AccessibilityServiceInfo'.
+e: app/src/main/kotlin/id/vern/antigravity/ui/components/AccessibilityDialog.kt:76:6 Syntax error: Expecting ')'.
+e: app/src/main/kotlin/id/vern/antigravity/ui/components/ApiKeyDialog.kt:40:46 @Composable invocations can only happen from the context of a @Composable function
+e: app/src/main/kotlin/id/vern/antigravity/ui/components/ApiKeyDialog.kt:81:6 Syntax error: Expecting ')'.
+e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ApiKeyScreen.kt:82:46 @Composable invocations can only happen from the context of a @Composable function
+e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ApiKeyScreen.kt:89:42 @Composable invocations can only happen from the context of a @Composable function
+e: app/src/main/kotlin/id/vern/antigravity/ui/screens/SettingsScreen.kt:5577:2 Syntax error: Expecting '}'.
