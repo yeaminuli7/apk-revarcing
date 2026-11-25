@@ -20,34 +20,25 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install browser
+      - name: Install playwright
         run: |
           npm init -y >/dev/null 2>&1 || true
-          npm i --no-audit --no-fund playwright-core@1.49.1
-          npx playwright-core install --with-deps chrome || npx playwright-core install --with-deps chromium
+          npm i --no-audit --no-fund playwright@1.49.1
+          npx playwright install --with-deps chromium
 
-      - name: Download from gofile via browser
-        continue-on-error: true
-        run: node tools/gofile-fetch.mjs || true
-
-      - name: Extract archive
-        continue-on-error: true
+      - name: Browser download
         run: |
-          cd incoming
-          for f in *; do
-            case "$f" in *.log|*.json|*.txt) continue;; esac
-            mkdir -p extracted
-            unzip -q -o "$f" -d extracted || tar -xf "$f" -C extracted || cp "$f" extracted/
-          done
-          find extracted -maxdepth 4 | head -300 | tee _tree.txt
+          mkdir -p incoming
+          node tools/gofile-fetch.mjs 2>&1 | tee -a incoming/console.txt
+          echo "exit=$?" | tee -a incoming/console.txt
 
       - name: Commit downloaded source
         if: always()
         run: |
-          rm -rf node_modules package.json package-lock.json
+          rm -rf node_modules package.json package-lock.json .npm
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          ls -laR incoming | head -120
+          find incoming -maxdepth 3 | head -100
           git add -A incoming
           git diff --cached --quiet || git commit -m "chore: import Antigravity_Modified source from gofile"
           git push origin "HEAD:${GITHUB_REF_NAME}" || true

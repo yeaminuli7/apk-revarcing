@@ -13,7 +13,6 @@ const log = (msg) => {
 };
 
 const browser = await chromium.launch({
-  channel: 'chrome',
   args: ['--no-sandbox', '--disable-dev-shm-usage'],
 });
 const ctx = await browser.newContext({ acceptDownloads: true });
