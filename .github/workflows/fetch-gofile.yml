@@ -1,0 +1,61 @@
+name: Fetch source from gofile
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download from gofile
+        run: |
+          set -euo pipefail
+          mkdir -p incoming
+
+          echo "== servers"
+          curl -sS https://api.gofile.io/servers | tee /tmp/servers.json | head -c 500; echo
+
+          echo "== guest token"
+          curl -sS -X POST https://api.gofile.io/accounts -H 'Content-Type: application/json' > /tmp/acct.json
+          head -c 500 /tmp/acct.json; echo
+          TOKEN=$(jq -r '.data.token // empty' /tmp/acct.json)
+          if [ -z "$TOKEN" ]; then echo "No guest token, continuing without auth"; fi
+
+          echo "== contents"
+          if [ -n "$TOKEN" ]; then
+            curl -sS -H "Authorization: Bearer $TOKEN" "https://api.gofile.io/contents/Z0nbSQmP?cache=true" > /tmp/contents.json
+          else
+            curl -sS "https://api.gofile.io/contents/Z0nbSQmP?cache=true" > /tmp/contents.json
+          fi
+          head -c 3000 /tmp/contents.json; echo
+
+          LINK=$(jq -r '.data.children[]? | .link' /tmp/contents.json | head -n1)
+          NAME=$(jq -r '.data.children[]? | .name' /tmp/contents.json | head -n1)
+          echo "LINK=$LINK"
+          echo "NAME=$NAME"
+          if [ -z "$LINK" ] || [ "$LINK" = "null" ]; then echo "Could not resolve direct link"; exit 1; fi
+
+          curl -L --fail --retry 3 -o "incoming/$NAME" "$LINK"
+          ls -lh incoming/
+          file "incoming/$NAME"
+
+          echo "== extracting"
+          mkdir -p incoming/extracted
+          unzip -q -o "incoming/$NAME" -d incoming/extracted || tar -xf "incoming/$NAME" -C incoming/extracted
+          find incoming/extracted -maxdepth 3 | head -100 > incoming/_tree.txt
+          cat incoming/_tree.txt
+
+      - name: Commit downloaded source
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A incoming
+          if git diff --cached --quiet; then echo "nothing to commit"; exit 0; fi
+          git commit -m "chore: import Antigravity_Modified source from gofile"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
