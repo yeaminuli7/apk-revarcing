@@ -69,7 +69,7 @@ object GeminiClient {
             val contentsArray = JSONArray()
 
             // System instruction as first user turn if provided
-            if (systemInstruction.isNotBlank()) {
+            if (!systemInstruction.isNullOrBlank()) {
                 contentsArray.put(
                     JSONObject().apply {
                         put("role", "user")

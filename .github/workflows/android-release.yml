@@ -78,6 +78,23 @@ jobs:
           chmod +x gradlew
           ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace 2>&1 | tee build-log.txt
 
+      - name: Dump compile errors
+        if: failure()
+        run: |
+          grep -E "^e: " build-log.txt | sed -E 's#file:///[^ ]*/app/src/#app/src/#' | sort -u > errors.txt || true
+          cp build-log.txt full-build-log.txt || true
+          echo "errors: $(wc -l < errors.txt)"
+
+      - name: Commit diagnostics
+        if: failure()
+        continue-on-error: true
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f errors.txt full-build-log.txt
+          git commit -m "ci: diagnostics from run ${{ github.run_number }} [skip ci]"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
       - name: Collect APKs
         if: always()
         run: |

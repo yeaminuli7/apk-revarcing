@@ -938,7 +938,6 @@ class AntigravityViewModel : ViewModel() {
     }
 
 
-    }
 
     fun bootEngine(context: Context, onReady: () -> Unit) {
         viewModelScope.launch {

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import id.vern.antigravity.R
 import id.vern.antigravity.api.GeminiClient
@@ -19,15 +20,23 @@ class ApiKeyScreen : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        var apiKey by remember { mutableStateOf("") }
-        var status by remember { mutableStateOf<String?>(null) }
-        var isLoading by remember { mutableStateOf(false) }
-        var navigateToMain by remember { mutableStateOf(false) }
-
         setContent {
             AntigravityTheme {
-                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                ApiKeyContent(activity = this@ApiKeyScreen)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ApiKeyContent(activity: ApiKeyScreen) {
+    var apiKey by remember { mutableStateOf("") }
+    var status by remember { mutableStateOf<String?>(null) }
+    var isLoading by remember { mutableStateOf(false) }
+    var navigateToMain by remember { mutableStateOf(false) }
+
+    AntigravityTheme {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -73,7 +82,7 @@ class ApiKeyScreen : ComponentActivity() {
                                 }
                                 isLoading = true
                                 status = null
-                                GeminiClient.saveApiKey(this@ApiKeyScreen, apiKey)
+                                GeminiClient.saveApiKey(activity, apiKey)
                                 isLoading = false
                                 status = stringResource(R.string.api_key_saved)
                                 navigateToMain = true
@@ -85,7 +94,7 @@ class ApiKeyScreen : ComponentActivity() {
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        if (GeminiClient.hasApiKey(this)) {
+                        if (GeminiClient.hasApiKey(activity)) {
                             TextButton(
                                 onClick = {
                                     navigateToMain = true
@@ -96,7 +105,5 @@ class ApiKeyScreen : ComponentActivity() {
                         }
                     }
                 }
-            }
-        }
     }
 }

@@ -3926,6 +3926,9 @@ fun DeveloperSettingsPage(
     val logs by viewModel.executionLogs.collectAsStateWithLifecycle()
     val scrollState = rememberScrollState()
 
+    var coreVersion by remember { mutableStateOf("") }
+    var coreState by remember { mutableStateOf(CoreEngineUiState()) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -4067,8 +4070,19 @@ fun DeveloperSettingsPage(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                                )
-                            }
+                            Text(
+                                text = stringResource(R.string.core_update_title),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = if (coreVersion.isNullOrBlank())
+                                    stringResource(R.string.core_update_checking)
+                                else
+                                    stringResource(R.string.core_update_current_version, coreVersion),
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                         if (coreState.isChecking) {
                             CircularProgressIndicator(
@@ -5562,3 +5576,9 @@ fun AboutSettingsPage(
     }
 }
 
+/** Lightweight UI state for the core engine CLI update card. */
+data class CoreEngineUiState(
+    val isChecking: Boolean = false,
+    val isUpdateAvailable: Boolean = false,
+    val latestVersion: String? = null
+)

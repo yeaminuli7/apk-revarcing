@@ -25,3 +25,5 @@ build-log.txt
 # temporary gofile fetch scaffolding
 incoming/
 tools/gofile-fetch.mjs
+errors.txt
+full-build-log.txt

@@ -13,6 +13,7 @@ import android.os.Looper
 import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityServiceInfo
 import android.graphics.Path
 import id.vern.antigravity.util.AppLogger
 import kotlinx.coroutines.CoroutineScope
@@ -132,13 +133,13 @@ class ScreenControlService : AccessibilityService() {
         val text = node.text?.toString() ?: ""
         val contentDesc = node.contentDescription?.toString() ?: ""
         val className = node.className?.toString() ?: ""
-        val bounds = node.boundsInScreen
+        val bounds = android.graphics.Rect().also { node.getBoundsInScreen(it) }
 
         if (clickable || text.isNotEmpty() || contentDesc.isNotEmpty()) {
             builder.append("$indent[${className.split('.').last()}]")
             if (text.isNotEmpty()) builder.append(" text=\"$text\"")
             if (contentDesc.isNotEmpty()) builder.append(" desc=\"$contentDesc\"")
-            if (bounds != null) {
+            if (!bounds.isEmpty) {
                 builder.append(" bounds=[${bounds.left},${bounds.top},${bounds.right},${bounds.bottom}]")
             }
             builder.append(" clickable=$clickable\n")
@@ -189,16 +190,16 @@ class ScreenControlService : AccessibilityService() {
             .build()
 
         dispatchGesture(gesture, object : AccessibilityService.GestureResultCallback() {
-            override fun onCompleted(gestureResult: GestureDescription.GestureResult?) {
-                super.onCompleted(gestureResult)
+            override fun onCompleted(gestureDescription: GestureDescription) {
+                super.onCompleted(gestureDescription)
                 mainHandler.post {
                     pendingTapCallback?.invoke(true)
                     pendingTapCallback = null
                 }
             }
 
-            override fun onCancelled(gestureResult: GestureDescription.GestureResult?) {
-                super.onCancelled(gestureResult)
+            override fun onCancelled(gestureDescription: GestureDescription) {
+                super.onCancelled(gestureDescription)
                 mainHandler.post {
                     pendingTapCallback?.invoke(false)
                     pendingTapCallback = null
@@ -235,7 +236,7 @@ class ScreenControlService : AccessibilityService() {
     fun openSettings(settingAction: String? = null) {
         val intent = Intent(Settings.ACTION_SETTINGS).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            settingAction?.let { putExtra(Settings.EXTRA_SETTINGS, it) }
+            settingAction?.let { putExtra(Intent.EXTRA_SETTINGS, it) }
         }
         startActivity(intent)
     }

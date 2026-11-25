@@ -20,6 +20,18 @@ object AppLogger {
         logHandler = handler
     }
 
+    fun v(tag: String, message: String) {
+        log(tag, message, false)
+    }
+
+    fun i(tag: String, message: String) {
+        log(tag, message, false)
+    }
+
+    fun w(tag: String, message: String) {
+        log(tag, message, false)
+    }
+
     fun d(tag: String, message: String) {
         log(tag, message, false)
     }
