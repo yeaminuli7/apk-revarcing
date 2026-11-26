@@ -1,0 +1,92 @@
+name: Probe core tarball
+
+on:
+  push:
+    paths:
+      - '.github/workflows/probe-core.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download and inspect core tarball
+        run: |
+          set -x
+          R=/tmp/report.txt
+          M="https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_arm64.json"
+          curl -sS -m 40 -o /tmp/m.json "$M"
+          cat /tmp/m.json >> $R
+          URL=$(python3 -c "import json;print(json.load(open('/tmp/m.json'))['url'])")
+          SHA=$(python3 -c "import json;print(json.load(open('/tmp/m.json'))['sha512'])")
+
+          curl -sSL --retry 3 -m 600 -o /tmp/core.tar.gz "$URL"
+          echo "=== size ===" >> $R
+          ls -l /tmp/core.tar.gz >> $R
+          echo "=== sha512 actual ===" >> $R
+          sha512sum /tmp/core.tar.gz | cut -d' ' -f1 >> $R
+          echo "expected: $SHA" >> $R
+
+          echo "=== tar members ===" >> $R
+          tar -tzvf /tmp/core.tar.gz >> $R 2>&1
+          echo "==========" >> $R
+
+          mkdir -p /tmp/ex && tar -xzf /tmp/core.tar.gz -C /tmp/ex 2>/dev/null
+          echo "=== extracted ===" >> $R
+          ls -la /tmp/ex >> $R
+          B=$(find /tmp/ex -type f -size +10M | head -1)
+          echo "largest: $B" >> $R
+          file "$B" >> $R 2>&1
+          echo "=== ELF INTERP / NEEDED ===" >> $R
+          readelf -l "$B" 2>/dev/null | grep -A1 "INTERP" >> $R
+          readelf -d "$B" 2>/dev/null | grep -E "NEEDED|RUNPATH|RPATH" >> $R
+          cp "$B" /tmp/agy 2>/dev/null
+
+          echo "=== app glibc asset ===" >> $R
+          mkdir -p /tmp/glibc && cd /tmp/glibc && unzip -oq "$GITHUB_WORKSPACE/app/src/main/assets/antigravity-glibc.zip"
+          find /tmp/glibc -name "*.so*" -o -name "ld-linux*" | sort >> $R
+          echo "=== all needed libs present? ===" >> $R
+          for lib in $(readelf -d /tmp/agy 2>/dev/null | grep NEEDED | sed 's/.*\[\(.*\)\]/\1/'); do
+            if find /tmp/glibc -name "$lib" | grep -q .; then
+              echo "OK   $lib" >> $R
+            else
+              echo "MISS $lib" >> $R
+            fi
+          done
+
+          cat $R
+
+      - name: Run extracted binary under qemu
+        if: always()
+        run: |
+          {
+            echo "=== qemu run ==="
+            sudo apt-get update -qq >/dev/null 2>&1
+            sudo apt-get install -y -qq qemu-user-static >/dev/null 2>&1 || echo "apt install failed"
+            LD=/tmp/glibc/glibc/lib/ld-linux-aarch64.so.1
+            ls -l "$LD" 2>&1
+            chmod -R +x /tmp/glibc 2>/dev/null
+            echo "--- direct qemu ld.so invocation ---"
+            timeout 120 qemu-aarch64-static "$LD" --library-path /tmp/glibc/glibc/lib /tmp/agy --version 2>&1 | head -20
+            echo "exit=$?"
+            echo "--- qemu -L variant ---"
+            timeout 120 qemu-aarch64-static -L /tmp/glibc/glibc/lib /tmp/agy --version 2>&1 | head -20
+            echo "exit=$?"
+          } >> /tmp/report.txt 2>&1
+          tail -40 /tmp/report.txt
+
+      - name: Commit report
+        if: always()
+        run: |
+          mkdir -p docs
+          cp /tmp/report.txt docs/core-report.txt 2>/dev/null || echo "no report" > docs/core-report.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f docs/core-report.txt
+          git commit -m "chore: core tarball report [skip ci]" || true
+          git push origin "HEAD:${GITHUB_REF_NAME}" || true
