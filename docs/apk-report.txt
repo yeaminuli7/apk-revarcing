@@ -1,0 +1,23 @@
++ echo '=== apk size ==='
+=== apk size ===
++ ls -lh /tmp/apk/Antigravity-1.0.1-release.apk
+-rw-r--r-- 1 runner runner 336M Nov 26 02:05 /tmp/apk/Antigravity-1.0.1-release.apk
++ echo '=== assets entries (name, uncompressed, method) ==='
+=== assets entries (name, uncompressed, method) ===
++ unzip -lv /tmp/apk/Antigravity-1.0.1-release.apk
++ awk 'NR<4 || /assets\/(bootstrap|core|antigravity-glibc)/'
+Archive:  /tmp/apk/Antigravity-1.0.1-release.apk
+ Length   Method    Size  Cmpr    Date    Time   CRC-32   Name
+--------  ------  ------- ---- ---------- ----- --------  ----
+ 1964220  Stored  1964220   0% 1981-01-01 01:01 d04a3edb  assets/antigravity-glibc.zip
+85070266  Stored 85070266   0% 1981-01-01 01:01 36f9548f  assets/bootstrap-aarch64.zip
+260669440  Stored 260669440   0% 1981-01-01 01:01 eef354d4  assets/core-cli-linux-arm64.tar
+     151  Defl:N      111  27% 1981-01-01 01:01 bf6f8fd9  assets/core-engine.txt
++ echo '=== duplicate name check ==='
+=== duplicate name check ===
++ unzip -l /tmp/apk/Antigravity-1.0.1-release.apk
++ awk '{print $4}'
++ sort
++ uniq -d
++ head -20
+
