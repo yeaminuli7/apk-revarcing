@@ -42,6 +42,8 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.RECORD_VIDEO" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.MEDIA_PROJECTION" />
 
@@ -86,6 +88,15 @@
             android:name="id.vern.antigravity.service.CoreServerService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <service
+            android:name="id.vern.antigravity.service.AssistantBubbleService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Floating on-screen assistant bubble" />
+        </service>
 
         <service
             android:name="id.vern.antigravity.accessibility.ScreenControlService"

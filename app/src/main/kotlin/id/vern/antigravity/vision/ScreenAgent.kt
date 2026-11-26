@@ -239,7 +239,7 @@ object ScreenAgent {
                     step++
 
                     val screenText = withContext(Dispatchers.Main) { service.describeScreen() }
-                    val shot = ScreenCaptureManager.captureBase64Jpeg(context)
+                    val shot = ScreenCaptureManager.captureBase64Jpeg()
                     mutableState.value = mutableState.value.copy(
                         step = step,
                         status = "Thinking (step $step)...",

@@ -139,6 +139,7 @@ import id.vern.antigravity.ui.theme.AntigravityBlue
 import id.vern.antigravity.ui.theme.AntigravityGreen
 import id.vern.antigravity.ui.theme.AntigravityRed
 import id.vern.antigravity.viewmodel.AntigravityViewModel
+import id.vern.antigravity.service.AssistantBubbleService
 import id.vern.antigravity.vision.ScreenAgent
 import id.vern.antigravity.vision.ScreenCaptureManager
 import kotlinx.coroutines.delay
@@ -183,6 +184,12 @@ fun ChatScreen(
         }
     }
 
+    fun requestScreenCapture() {
+        val mgr = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
+            as android.media.projection.MediaProjectionManager
+        projectionLauncher.launch(mgr.createScreenCaptureIntent())
+    }
+
     fun startScreenAgent(goal: String) {
         if (!AccessibilityHelper.isServiceEnabled(context)) {
             Toast.makeText(
@@ -194,11 +201,13 @@ fun ChatScreen(
             return
         }
         if (!ScreenCaptureManager.isReady()) {
-            // Ask for screen-capture permission, then run the agent once granted.
-            Toast.makeText(context, "Allow screen capture to let the agent see the screen.", Toast.LENGTH_LONG).show()
-            val mgr = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
-                as android.media.projection.MediaProjectionManager
-            projectionLauncher.launch(mgr.createScreenCaptureIntent())
+            // One-time consent: the capture session then stays alive for every later action.
+            Toast.makeText(
+                context,
+                "One-time permission: choose \"Entire screen\" so the agent works in every app.",
+                Toast.LENGTH_LONG
+            ).show()
+            requestScreenCapture()
             return
         }
         val metrics = context.resources.displayMetrics
@@ -1232,6 +1241,91 @@ fun ChatScreen(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                                 modifier = Modifier.size(16.dp)
                             )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // One-time setup status: these two permissions make the agent work in
+                    // every app without asking again.
+                    var captureReady by remember { mutableStateOf(ScreenCaptureManager.isReady()) }
+                    var bubbleOn by remember { mutableStateOf(AssistantBubbleService.isShowing()) }
+                    val accessibilityOn = AccessibilityHelper.isServiceEnabled(context)
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(
+                                text = "Screen agent setup",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = if (accessibilityOn) "✓" else "○",
+                                    color = if (accessibilityOn) AntigravityGreen else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Accessibility service",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TextButton(onClick = { AccessibilityHelper.openSettings(context) }) {
+                                    Text("Open")
+                                }
+                            }
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = if (captureReady) "✓" else "○",
+                                    color = if (captureReady) AntigravityGreen else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Screen sharing (entire screen)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TextButton(onClick = {
+                                    requestScreenCapture()
+                                    scope.launch {
+                                        kotlinx.coroutines.delay(1200)
+                                        captureReady = ScreenCaptureManager.isReady()
+                                    }
+                                }) {
+                                    Text(if (captureReady) "Granted" else "Allow")
+                                }
+                            }
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = if (bubbleOn) "✓" else "○",
+                                    color = if (bubbleOn) AntigravityGreen else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Floating bubble",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TextButton(onClick = {
+                                    if (AssistantBubbleService.isShowing()) {
+                                        AssistantBubbleService.hide(context)
+                                        bubbleOn = false
+                                    } else {
+                                        AssistantBubbleService.show(context)
+                                        bubbleOn = true
+                                    }
+                                }) {
+                                    Text(if (bubbleOn) "On" else "Off")
+                                }
+                            }
                         }
                     }
 
