@@ -11,20 +11,21 @@ For more details see https://docs.gradle.org/8.13/release-notes.html
 Starting a Gradle Daemon (subsequent builds will be faster)
 Configuration on demand is an incubating feature.
 Calculating task graph as no cached configuration is available for tasks: :app:assembleRelease
-> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
 > Task :app:preBuild UP-TO-DATE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
 > Task :app:preReleaseBuild UP-TO-DATE
 > Task :app:buildKotlinToolingMetadata
+> Task :app:extractProguardFiles
 > Task :app:generateReleaseBuildConfig
 > Task :app:generateReleaseResValues FROM-CACHE
 > Task :app:mergeReleaseJniLibFolders
-> Task :app:checkReleaseDuplicateClasses
-> Task :app:generateReleaseResources
 > Task :app:mapReleaseSourceSetPaths
+> Task :app:generateReleaseResources
 > Task :app:checkReleaseAarMetadata
+> Task :app:mergeReleaseNativeLibs
+> Task :app:checkReleaseDuplicateClasses
 > Task :app:createReleaseCompatibleScreenManifests
 > Task :app:extractDeepLinksRelease FROM-CACHE
-> Task :app:mergeReleaseNativeLibs
 
 > Task :app:stripReleaseDebugSymbols
 Unable to strip the following libraries, packaging them as they are: libandroidx.graphics.path.so, libdatastore_shared_counter.so. Run with --info option to learn more.
@@ -39,29 +40,34 @@ Unable to strip the following libraries, packaging them as they are: libandroidx
 	Element uses-permission#android.permission.READ_EXTERNAL_STORAGE at AndroidManifest.xml:45:5-80 duplicated with element declared at AndroidManifest.xml:34:5-80
 
 > Task :app:processReleaseManifest
-> Task :app:mergeReleaseArtProfile
-> Task :app:extractProguardFiles
-> Task :app:mergeReleaseStartupProfile
 > Task :app:processReleaseManifestForPackage
-> Task :app:parseReleaseLocalResources
+> Task :app:mergeReleaseArtProfile
+> Task :app:mergeReleaseStartupProfile
 > Task :app:mergeReleaseShaders
 > Task :app:compileReleaseShaders NO-SOURCE
 > Task :app:generateReleaseAssets UP-TO-DATE
 > Task :app:extractReleaseVersionControlInfo
+> Task :app:parseReleaseLocalResources
 > Task :app:validateSigningRelease
 > Task :app:writeReleaseAppMetadata
 > Task :app:writeReleaseSigningConfigVersions
 > Task :app:collectReleaseDependencies
 > Task :app:sdkReleaseDependencyData
-> Task :app:mergeReleaseAssets
-> Task :app:compressReleaseAssets
 > Task :app:mergeReleaseResources
+> Task :app:mergeReleaseAssets
 > Task :app:processReleaseResources
+> Task :app:compressReleaseAssets
 
 > Task :app:compileReleaseKotlin FAILED
-e: file:///home/runner/work/apk-revarcing/apk-revarcing/app/src/main/kotlin/id/vern/antigravity/service/CloudCodeQuotaService.kt:1034:66 Argument type mismatch: actual type is 'kotlin.String?', but 'kotlin.String' was expected.
-e: file:///home/runner/work/apk-revarcing/apk-revarcing/app/src/main/kotlin/id/vern/antigravity/ui/screens/ChatScreen.kt:1159:65 Unresolved reference 'VpnKey'.
-e: file:///home/runner/work/apk-revarcing/apk-revarcing/app/src/main/kotlin/id/vern/antigravity/ui/screens/SettingsScreen.kt:442:49 Unresolved reference 'VpnKey'.
+e: file:///home/runner/work/apk-revarcing/apk-revarcing/app/src/main/kotlin/id/vern/antigravity/accessibility/ScreenControlService.kt:282:16 Return type mismatch: expected 'kotlin.Boolean', actual 'kotlin.Unit'.
+e: file:///home/runner/work/apk-revarcing/apk-revarcing/app/src/main/kotlin/id/vern/antigravity/accessibility/ScreenControlService.kt:287:23 Return type mismatch: expected 'kotlin.Unit', actual 'kotlin.Boolean'.
+e: file:///home/runner/work/apk-revarcing/apk-revarcing/app/src/main/kotlin/id/vern/antigravity/accessibility/ScreenControlService.kt:291:16 Return type mismatch: expected 'kotlin.Unit', actual 'kotlin.Boolean'.
+e: file:///home/runner/work/apk-revarcing/apk-revarcing/app/src/main/kotlin/id/vern/antigravity/ui/screens/ChatScreen.kt:197:48 Unresolved reference 'Context'.
+e: file:///home/runner/work/apk-revarcing/apk-revarcing/app/src/main/kotlin/id/vern/antigravity/ui/screens/ChatScreen.kt:1650:64 Unresolved reference 'Context'.
+e: file:///home/runner/work/apk-revarcing/apk-revarcing/app/src/main/kotlin/id/vern/antigravity/ui/screens/ChatScreen.kt:1730:25 Unresolved reference 'TextButton'.
+e: file:///home/runner/work/apk-revarcing/apk-revarcing/app/src/main/kotlin/id/vern/antigravity/ui/screens/ChatScreen.kt:1731:29 @Composable invocations can only happen from the context of a @Composable function
+e: file:///home/runner/work/apk-revarcing/apk-revarcing/app/src/main/kotlin/id/vern/antigravity/ui/screens/ChatScreen.kt:1734:25 Unresolved reference 'TextButton'.
+e: file:///home/runner/work/apk-revarcing/apk-revarcing/app/src/main/kotlin/id/vern/antigravity/ui/screens/ChatScreen.kt:1735:29 @Composable invocations can only happen from the context of a @Composable function
 
 FAILURE: Build failed with an exception.
 
@@ -272,6 +278,6 @@ Caused by: org.jetbrains.kotlin.gradle.tasks.CompilationErrorException: Compilat
 	... 2 more
 
 
-BUILD FAILED in 38s
+BUILD FAILED in 32s
 34 actionable tasks: 31 executed, 3 from cache
 Configuration cache entry stored.
