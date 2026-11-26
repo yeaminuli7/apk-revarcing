@@ -1,0 +1,60 @@
+name: Probe agy api-key support
+
+on:
+  push:
+    paths:
+      - '.github/workflows/probe-agy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pull agy and look for api-key support
+        run: |
+          R=/tmp/report.txt
+          set -x
+          curl -sS -m 40 -o /tmp/m.json "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_arm64.json"
+          URL=$(python3 -c "import json;print(json.load(open('/tmp/m.json'))['url'])")
+          curl -sSL -m 900 -o /tmp/core.tar.gz "$URL"
+          mkdir -p /tmp/ex && tar -xzf /tmp/core.tar.gz -C /tmp/ex
+          A=/tmp/ex/antigravity
+          chmod +x "$A"
+          mkdir -p /tmp/g && cd /tmp/g && unzip -oq "$GITHUB_WORKSPACE/app/src/main/assets/antigravity-glibc.zip"
+          LD=/tmp/g/glibc/lib/ld-linux-aarch64.so.1
+          chmod +x "$LD" /tmp/g/glibc/lib/*.so* 2>/dev/null || true
+          run_agy() { "$LD" --library-path /tmp/g/glibc/lib "$A" "$@" 2>&1 | head -40; }
+
+          {
+            echo "=== --help ==="
+            run_agy --help
+            echo "=== --version ==="
+            run_agy --version
+            echo "=== env vars mentioning API KEY ==="
+            strings -a "$A" | grep -E "^(GEMINI|GOOGLE|ANTIGRAVITY|AGY)[A-Z_]*(API_KEY|TOKEN|AUTH)" | sort -u | head -30
+            echo "=== mentions of GEMINI_API_KEY / GOOGLE_API_KEY ==="
+            strings -a "$A" | grep -E "GEMINI_API_KEY|GOOGLE_API_KEY|GOOGLE_GENAI_API_KEY|api_key|apikey" | sort -u | head -40
+            echo "=== auth-ish flags ==="
+            strings -a "$A" | grep -E "^--(api|key|auth|token|login)" | sort -u | head -20
+            echo "=== login/auth subcommands ==="
+            strings -a "$A" | grep -iE "please (run|visit).{0,40}(login|auth)|not logged in|authentication required" | sort -u | head -10
+            echo "=== acp help ==="
+            run_agy acp --help
+          } > "$R" 2>&1
+          tail -60 "$R"
+
+      - name: Commit report
+        if: always()
+        run: |
+          mkdir -p docs
+          cp /tmp/report.txt docs/agy-apikey-report.txt 2>/dev/null || echo "no report" > docs/agy-apikey-report.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f docs/agy-apikey-report.txt
+          git commit -m "chore: agy api-key probe [skip ci]" || true
+          git push origin "HEAD:${GITHUB_REF_NAME}" || true
