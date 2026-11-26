@@ -10,7 +10,6 @@ import id.vern.antigravity.data.QuotaBucket
 import id.vern.antigravity.data.QuotaGroup
 import id.vern.antigravity.data.TierInfo
 import id.vern.antigravity.data.UserQuotaSummary
-import id.vern.antigravity.oauth.OAuthManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -904,8 +903,7 @@ object CloudCodeQuotaService {
                 var modelsFetchFailed = false
                 if (modelsRespStr.isNullOrBlank() && context != null) {
                     try {
-                        OAuthManager.refreshTokenIfNeeded(context)
-                        val token = OAuthManager.getAccessToken(context)
+                        val token: String? = null // Google OAuth removed: API-key builds have no session
                         if (!token.isNullOrBlank()) {
                             modelsRespStr = makePostRequestWithFallback(MODELS_PATH, token)
                         }
@@ -1000,8 +998,7 @@ object CloudCodeQuotaService {
             return@withContext localSummary
         }
 
-        OAuthManager.refreshTokenIfNeeded(context)
-        val token = OAuthManager.getAccessToken(context)
+        val token: String? = null // Google OAuth removed: API-key builds have no session
 
         if (!token.isNullOrBlank()) {
             for (baseUrl in CLOUDCODE_API_BASES) {
@@ -1031,8 +1028,7 @@ object CloudCodeQuotaService {
     }
 
     suspend fun fetchCodeAssistTier(context: Context): CodeAssistTier? = withContext(Dispatchers.IO) {
-        OAuthManager.refreshTokenIfNeeded(context)
-        val token = OAuthManager.getAccessToken(context) ?: return@withContext null
+        val token: String? = null // Google OAuth removed: API-key builds have no session ?: return@withContext null
 
         try {
             val respStr = makePostRequestWithFallback(TIER_PATH, token) ?: return@withContext null
@@ -1074,16 +1070,7 @@ object CloudCodeQuotaService {
                 )
             }
 
-            val resultTier = CodeAssistTier(currentTier = curTier, paidTier = paidTier)
-            val email = OAuthManager.getUserEmail(context)
-            if (!email.isNullOrBlank()) {
-                id.vern.antigravity.oauth.AccountManager.updateAccountTier(
-                    context,
-                    email,
-                    resultTier.normalizedTierString
-                )
-            }
-            resultTier
+            CodeAssistTier(currentTier = curTier, paidTier = paidTier)
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching code assist tier: ${e.message}", e)
             null

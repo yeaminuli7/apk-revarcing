@@ -3,7 +3,6 @@ package id.vern.antigravity.executor
 import android.content.Context
 import android.system.Os
 import id.vern.antigravity.install.BootstrapInstaller
-import id.vern.antigravity.oauth.OAuthManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
@@ -92,11 +91,6 @@ object EngineExecutor {
             File(prefixBin, "sh").canExecute() -> File(prefixBin, "sh").absolutePath
             else -> "/system/bin/sh"
         }
-
-        try {
-            OAuthManager.checkAndImportExistingToken(context)
-            OAuthManager.syncCompanionStateFiles(context)
-        } catch (e: Exception) {}
 
         try {
             val pb = ProcessBuilder(bashBin, "-c", command)
@@ -242,8 +236,6 @@ object EngineExecutor {
 
         try {
             BootstrapInstaller.ensurePermissions(context)
-            OAuthManager.checkAndImportExistingToken(context)
-            OAuthManager.syncCompanionStateFiles(context)
 
             val gitConfig = File(homeDir, ".gitconfig")
             val safeLine = "[safe]\n\tdirectory = *\n"
@@ -508,8 +500,6 @@ object EngineExecutor {
         }
 
         try {
-            OAuthManager.checkAndImportExistingToken(context)
-            OAuthManager.syncCompanionStateFiles(context)
             id.vern.antigravity.service.PermissionConfigService.syncSettingsJsonFiles(context)
         } catch (_: Exception) {}
 

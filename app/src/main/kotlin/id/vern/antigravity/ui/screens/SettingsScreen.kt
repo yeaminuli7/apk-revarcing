@@ -60,7 +60,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Extension
-import id.vern.antigravity.oauth.OAuthManager
 import id.vern.antigravity.service.AgyModelsService
 import id.vern.antigravity.service.RuleItem
 import id.vern.antigravity.service.McpServerItem
@@ -136,7 +135,6 @@ import id.vern.antigravity.data.ThemePreset
 import id.vern.antigravity.data.ModelAvailability
 import id.vern.antigravity.data.AvailableModelInfo
 import id.vern.antigravity.data.SubscriptionTierType
-import id.vern.antigravity.oauth.StoredAccount
 import id.vern.antigravity.ui.components.LogViewer
 import id.vern.antigravity.ui.theme.AntigravityBlue
 import id.vern.antigravity.ui.theme.AntigravityGreen
@@ -144,6 +142,7 @@ import id.vern.antigravity.ui.theme.AntigravityRed
 import id.vern.antigravity.ui.theme.AntigravityAmber
 import id.vern.antigravity.ui.theme.parseColorOrNull
 import id.vern.antigravity.ui.theme.isColorDark
+import id.vern.antigravity.api.GeminiClient
 import id.vern.antigravity.viewmodel.AntigravityViewModel
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
@@ -371,9 +370,7 @@ fun MainSettingsPage(
     onNavigateTo: (SettingsPage) -> Unit
 ) {
     val context = LocalContext.current
-    val userEmail by viewModel.userEmail.collectAsStateWithLifecycle()
-    val userName by viewModel.userName.collectAsStateWithLifecycle()
-    val userPicture by viewModel.userPicture.collectAsStateWithLifecycle()
+    val hasApiKey = remember { GeminiClient.hasApiKey(context) }
     val scrollState = rememberScrollState()
 
     Column(
@@ -430,13 +427,7 @@ fun MainSettingsPage(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(8.dp))
-                .clickable {
-                    if (userEmail != null) {
-                        onNavigateTo(SettingsPage.ACCOUNT)
-                    } else {
-                        viewModel.startGoogleSignIn(context)
-                    }
-                }
+                .clickable { viewModel.showApiKeyDialogExternal() }
                 .padding(horizontal = 4.dp, vertical = 8.dp)
         ) {
 
@@ -444,38 +435,22 @@ fun MainSettingsPage(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
-                    .background(if (userEmail != null) AntigravityBlue.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant),
+                    .background(if (hasApiKey) AntigravityBlue.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
-                if (!userPicture.isNullOrBlank()) {
-                    AsyncImage(
-                        model = userPicture,
-                        contentDescription = userName,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else if (userEmail != null) {
-                    Text(
-                        text = (userName.takeIf { it.isNotBlank() } ?: "U").take(1).uppercase(),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        color = AntigravityBlue
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.AccountCircle,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.VpnKey,
+                    contentDescription = null,
+                    tint = if (hasApiKey) AntigravityBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
             }
 
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = if (userEmail != null) userName.ifBlank { "Google User" } else stringResource(R.string.account_sign_in_title),
+                    text = stringResource(R.string.api_key_title),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -483,7 +458,7 @@ fun MainSettingsPage(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = if (userEmail != null) stringResource(R.string.status_authenticated) else stringResource(R.string.account_tap_to_sign_in),
+                    text = if (hasApiKey) "Configured" else stringResource(R.string.api_key_optional_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -493,13 +468,11 @@ fun MainSettingsPage(
 
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = if (userEmail != null) stringResource(R.string.account_title) else stringResource(R.string.account_btn_sign_in),
+                contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 modifier = Modifier.size(20.dp)
             )
         }
-
-        Spacer(modifier = Modifier.height(20.dp))
     }
 }
 
@@ -1637,7 +1610,6 @@ fun ModelsAndUsageSettingsPage(
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
-    val userEmail by viewModel.userEmail.collectAsStateWithLifecycle()
     val enableCreditOverages by viewModel.enableCreditOverages.collectAsStateWithLifecycle()
     val userQuotaSummary by viewModel.userQuotaSummary.collectAsStateWithLifecycle()
     val codeAssistTier by viewModel.codeAssistTier.collectAsStateWithLifecycle()
@@ -1645,84 +1617,10 @@ fun ModelsAndUsageSettingsPage(
     val quotaErrorMessage by viewModel.quotaErrorMessage.collectAsStateWithLifecycle()
     val cliModels by viewModel.cliModels.collectAsStateWithLifecycle()
 
-    LaunchedEffect(Unit, userEmail) {
-        if (userEmail != null) {
-            viewModel.refreshUserQuota(context)
-            viewModel.refreshCliModels(context)
-        }
+    LaunchedEffect(Unit) {
+        viewModel.refreshUserQuota(context)
+        viewModel.refreshCliModels(context)
     }
-
-    if (userEmail == null) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 6.dp)
-        ) {
-            SubSheetHeader(
-                title = "Models & Usage",
-                subtitle = "Manage your model quota and account.",
-                onBack = onBack
-            )
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(scrollState),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                SettingsCard {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AccountCircle,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(36.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "Sign In Required",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Connect your Google account with OAuth 2.0 to access Gemini models, synchronize live usage, and view model quotas.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(20.dp))
-                        Button(
-                            onClick = { viewModel.startGoogleSignIn(context) },
-                            colors = ButtonDefaults.buttonColors(containerColor = AntigravityBlue),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(stringResource(R.string.account_sign_in_google), fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                }
-            }
-        }
-        return
-    }
-
-    val userName = remember(userEmail) { id.vern.antigravity.oauth.OAuthManager.getUserName(context) }
 
     Column(
         modifier = Modifier
@@ -3497,13 +3395,9 @@ fun AccountSettingsPage(
     onNavigateTo: (SettingsPage) -> Unit = {}
 ) {
     val context = LocalContext.current
-    val userEmail by viewModel.userEmail.collectAsStateWithLifecycle()
-    val userName by viewModel.userName.collectAsStateWithLifecycle()
-    val userPicture by viewModel.userPicture.collectAsStateWithLifecycle()
-    val accounts by viewModel.accounts.collectAsStateWithLifecycle()
-    val codeAssistTier by viewModel.codeAssistTier.collectAsStateWithLifecycle()
-    val scrollState = rememberScrollState()
-    val token: String? = remember(userEmail) { OAuthManager.getAccessToken(context) }
+    var apiKey by remember { mutableStateOf(GeminiClient.getApiKey(context).orEmpty()) }
+    var showKey by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -3511,407 +3405,80 @@ fun AccountSettingsPage(
             .padding(horizontal = 20.dp, vertical = 6.dp)
     ) {
         SubSheetHeader(
-            title = stringResource(R.string.account_title),
-            subtitle = stringResource(R.string.account_subtitle),
+            title = "API Key",
+            subtitle = "Only a Gemini API key is needed. Google sign-in is not used.",
             onBack = onBack
         )
 
         Column(
             modifier = Modifier
                 .weight(1f)
-                .verticalScroll(scrollState)
+                .verticalScroll(rememberScrollState())
         ) {
             SettingsCard {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(if (userEmail != null) AntigravityBlue else MaterialTheme.colorScheme.surfaceVariant),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (!userPicture.isNullOrBlank()) {
-                                AsyncImage(
-                                    model = userPicture,
-                                    contentDescription = userName,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            } else if (userEmail != null) {
-                                Text(
-                                    text = (userName.takeIf { it.isNotBlank() } ?: "U").take(1).uppercase(),
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 20.sp,
-                                    color = Color.White
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.AccountCircle,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = if (userEmail != null) userName.ifBlank { "Google User" } else stringResource(R.string.account_not_signed_in),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                if (userEmail != null) {
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    val tierType = codeAssistTier?.tierType ?: SubscriptionTierType.FREE
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = when (tierType) {
-                                            SubscriptionTierType.ULTRA -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f)
-                                            SubscriptionTierType.PRO -> AntigravityBlue.copy(alpha = 0.15f)
-                                            SubscriptionTierType.ENTERPRISE -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)
-                                            else -> MaterialTheme.colorScheme.surfaceVariant
-                                        }
-                                    ) {
-                                        Text(
-                                            text = when (tierType) {
-                                                SubscriptionTierType.ULTRA -> stringResource(R.string.account_tier_ultra)
-                                                SubscriptionTierType.PRO -> stringResource(R.string.account_tier_pro)
-                                                SubscriptionTierType.ENTERPRISE -> stringResource(R.string.account_tier_enterprise)
-                                                else -> stringResource(R.string.account_tier_free)
-                                            },
-                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                            fontWeight = FontWeight.Bold,
-                                            color = when (tierType) {
-                                                SubscriptionTierType.ULTRA -> MaterialTheme.colorScheme.tertiary
-                                                SubscriptionTierType.PRO -> AntigravityBlue
-                                                SubscriptionTierType.ENTERPRISE -> MaterialTheme.colorScheme.secondary
-                                                else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                            },
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
-                            }
-                            if (!userEmail.isNullOrBlank()) {
-                                Text(
-                                    text = userEmail ?: "",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Text(
-                                text = if (userEmail != null) stringResource(R.string.status_authenticated) else stringResource(R.string.account_not_authenticated),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (userEmail != null) AntigravityGreen else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
-                    Spacer(modifier = Modifier.height(16.dp))
-
+                Column(modifier = Modifier.padding(14.dp)) {
                     Text(
-                        stringResource(R.string.account_details_header),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
+                        text = "Gemini API key",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Get a key from Google AI Studio and paste it below.",
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        stringResource(R.string.account_token_path),
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = apiKey,
+                        onValueChange = { apiKey = it; status = null },
+                        label = { Text("API key") },
+                        placeholder = { Text("AIza...") },
+                        singleLine = true,
+                        visualTransformation = if (showKey) androidx.compose.ui.text.input.VisualTransformation.None
+                        else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        if (userEmail != null) stringResource(R.string.account_status_active) else stringResource(R.string.account_status_disconnected),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (userEmail != null) AntigravityGreen else MaterialTheme.colorScheme.error
-                    )
-
-                    if (!token.isNullOrBlank()) {
-                        val displayToken = token
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Text(
-                            text = stringResource(R.string.account_token_label),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = 8.dp, bottom = 8.dp)
-                            ) {
-                                Text(
-                                    text = displayToken,
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 11.sp
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 3,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                IconButton(
-                                    onClick = {
-                                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        cm.setPrimaryClip(ClipData.newPlainText("access_token", displayToken))
-                                        Toast.makeText(context, context.getString(R.string.account_token_copied), Toast.LENGTH_SHORT).show()
-                                    },
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ContentCopy,
-                                        contentDescription = stringResource(R.string.chat_copy_code),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { showKey = !showKey }) {
+                            Text(if (showKey) "Hide" else "Show")
                         }
-                    }
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    if (userEmail != null) {
-                        Button(
-                            onClick = { onNavigateTo(SettingsPage.MODELS_AND_USAGE) },
-                            colors = ButtonDefaults.buttonColors(containerColor = AntigravityBlue),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_model_gemini),
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = stringResource(R.string.account_btn_models_usage),
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            OutlinedButton(
-                                onClick = {
-                                    viewModel.refreshAuthState(context)
-                                    Toast.makeText(context, context.getString(R.string.account_toast_token_refreshed), Toast.LENGTH_SHORT).show()
-                                },
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(stringResource(R.string.account_btn_refresh_token))
-                            }
-
-                            OutlinedButton(
-                                onClick = {
-                                    viewModel.signOutGoogle(context)
-                                    Toast.makeText(context, context.getString(R.string.account_toast_signed_out), Toast.LENGTH_SHORT).show()
-                                    onBack()
-                                },
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(stringResource(R.string.account_btn_sign_out))
-                            }
-                        }
-                    } else {
+                        Spacer(modifier = Modifier.weight(1f))
                         Button(
                             onClick = {
-                                viewModel.startGoogleSignIn(context)
+                                val key = apiKey.trim()
+                                if (key.isBlank()) {
+                                    status = "Enter a key first"
+                                } else {
+                                    GeminiClient.saveApiKey(context, key)
+                                    status = "Saved"
+                                }
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = AntigravityBlue),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth()
+                            shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text(stringResource(R.string.account_btn_sign_in))
+                            Text("Save")
                         }
                     }
-                }
-            }
-
-            if (userEmail != null || accounts.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(20.dp))
-
-                Text(
-                    text = stringResource(R.string.account_switcher_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = stringResource(R.string.account_switcher_subtitle),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                val otherAccounts = remember(accounts, userEmail) {
-                    accounts.filter { !it.email.equals(userEmail, ignoreCase = true) }
-                }
-
-                SettingsCard {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                            .animateContentSize()
+                    status?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AntigravityGreen
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    TextButton(
+                        onClick = {
+                            GeminiClient.clearApiKey(context)
+                            apiKey = ""
+                            status = "Cleared"
+                        }
                     ) {
-                        if (otherAccounts.isNotEmpty()) {
-                            otherAccounts.forEachIndexed { idx, acc ->
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable {
-                                            viewModel.switchAccount(context, acc.id)
-                                            Toast.makeText(
-                                                context,
-                                                context.getString(R.string.account_switched_toast, acc.email),
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                        .padding(vertical = 8.dp, horizontal = 4.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        if (!acc.picture.isNullOrBlank()) {
-                                            AsyncImage(
-                                                model = acc.picture,
-                                                contentDescription = acc.name,
-                                                contentScale = ContentScale.Crop,
-                                                modifier = Modifier.fillMaxSize()
-                                            )
-                                        } else {
-                                            Text(
-                                                text = acc.name.take(1).uppercase().ifBlank { "U" },
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 14.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.width(12.dp))
-
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                text = acc.name.ifBlank { acc.email },
-                                                style = MaterialTheme.typography.titleSmall,
-                                                fontWeight = FontWeight.Medium,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Surface(
-                                                shape = RoundedCornerShape(10.dp),
-                                                color = when (acc.tierType) {
-                                                    SubscriptionTierType.ULTRA -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f)
-                                                    SubscriptionTierType.PRO -> AntigravityBlue.copy(alpha = 0.15f)
-                                                    SubscriptionTierType.ENTERPRISE -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)
-                                                    else -> MaterialTheme.colorScheme.surfaceVariant
-                                                }
-                                            ) {
-                                                Text(
-                                                    text = when (acc.tierType) {
-                                                        SubscriptionTierType.ULTRA -> stringResource(R.string.account_tier_ultra)
-                                                        SubscriptionTierType.PRO -> stringResource(R.string.account_tier_pro)
-                                                        SubscriptionTierType.ENTERPRISE -> stringResource(R.string.account_tier_enterprise)
-                                                        else -> stringResource(R.string.account_tier_free)
-                                                    },
-                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = when (acc.tierType) {
-                                                        SubscriptionTierType.ULTRA -> MaterialTheme.colorScheme.tertiary
-                                                        SubscriptionTierType.PRO -> AntigravityBlue
-                                                        SubscriptionTierType.ENTERPRISE -> MaterialTheme.colorScheme.secondary
-                                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                                    },
-                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                )
-                                            }
-                                        }
-                                        Text(
-                                            text = acc.email,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-
-                                    IconButton(
-                                        onClick = {
-                                            viewModel.removeAccount(context, acc.id)
-                                        },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Delete,
-                                            contentDescription = stringResource(R.string.account_remove_button),
-                                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                }
-
-                                if (idx < otherAccounts.size - 1) {
-                                    HorizontalDivider(
-                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f),
-                                        modifier = Modifier.padding(vertical = 4.dp)
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(10.dp))
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Button(
-                            onClick = { viewModel.startGoogleSignIn(context) },
-                            colors = ButtonDefaults.buttonColors(containerColor = AntigravityBlue),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = stringResource(R.string.account_add_button),
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
+                        Text("Remove key", color = AntigravityRed)
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(30.dp))
         }
     }
 }

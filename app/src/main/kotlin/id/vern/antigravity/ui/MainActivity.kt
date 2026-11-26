@@ -66,12 +66,9 @@ class MainActivity : ComponentActivity() {
                 customFg = customFg,
                 customAccent = customAccent
             ) {
-                // Google OAuth on the splash screen is the primary sign-in, so
-                // this screen is only shown when the user has neither a Gemini
-                // API key nor an existing Antigravity OAuth session.
-                val startDestination = if (GeminiClient.hasApiKey(this@MainActivity) ||
-                    id.vern.antigravity.oauth.OAuthManager.hasToken(this@MainActivity)
-                ) {
+                // API-key only build: there is no Google sign-in, so the key screen
+                // is shown whenever no Gemini key is stored yet.
+                val startDestination = if (GeminiClient.hasApiKey(this@MainActivity)) {
                     AppDestination.SPLASH
                 } else {
                     AppDestination.API_KEY

@@ -5,7 +5,6 @@ import android.os.Environment
 import android.system.Os
 import android.system.OsConstants
 import android.util.Log
-import id.vern.antigravity.oauth.OAuthManager
 import id.vern.antigravity.util.AppLogger
 import id.vern.antigravity.util.NetworkDownloader
 import kotlinx.coroutines.Dispatchers
@@ -858,9 +857,6 @@ object BootstrapInstaller {
             }
         }
 
-        try {
-            id.vern.antigravity.oauth.OAuthManager.syncCompanionStateFiles(context)
-        } catch (e: Exception) {}
 
         TermuxShebangRewriter.rewriteDirectory(File(prefix, "bin"), prefix.absolutePath)
         TermuxShebangRewriter.rewriteDirectory(File(prefix, "pkg"), prefix.absolutePath)
@@ -913,8 +909,6 @@ object BootstrapInstaller {
         }
 
         try {
-            OAuthManager.checkAndImportExistingToken(context)
-            OAuthManager.syncCompanionStateFiles(context)
         } catch (e: Exception) {}
     }
 }

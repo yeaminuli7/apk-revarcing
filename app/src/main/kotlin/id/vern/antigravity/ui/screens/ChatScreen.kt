@@ -130,7 +130,6 @@ import id.vern.antigravity.api.GeminiClient
 import id.vern.antigravity.accessibility.AccessibilityHelper
 import id.vern.antigravity.ui.components.AccessibilityDialog
 import id.vern.antigravity.ui.components.ApiKeyDialog
-import id.vern.antigravity.ui.components.GoogleSignInDialog
 import id.vern.antigravity.ui.components.ModelSelectorDialog
 import id.vern.antigravity.ui.theme.AntigravityBlue
 import id.vern.antigravity.ui.theme.AntigravityGreen
@@ -162,12 +161,7 @@ fun ChatScreen(
     val selectedModel by viewModel.selectedModel.collectAsStateWithLifecycle()
     val thinkingBudget by viewModel.thinkingBudget.collectAsStateWithLifecycle()
     val verboseThinking by viewModel.verboseThinking.collectAsStateWithLifecycle()
-    val userEmail by viewModel.userEmail.collectAsStateWithLifecycle()
-    val userName by viewModel.userName.collectAsStateWithLifecycle()
-    val userPicture by viewModel.userPicture.collectAsStateWithLifecycle()
-    val isAuthenticating by viewModel.isAuthenticating.collectAsStateWithLifecycle()
-    val authError by viewModel.authError.collectAsStateWithLifecycle()
-    val showAuthDialog by viewModel.showGoogleSignInDialog.collectAsStateWithLifecycle()
+    val hasApiKey = remember { GeminiClient.hasApiKey(context) }
     val showApiKeyDialogState by viewModel.showApiKeyDialog.collectAsStateWithLifecycle()
     val showAccessibilityDialogState by viewModel.showAccessibilityDialog.collectAsStateWithLifecycle()
     val showModelSelector by viewModel.showModelSelector.collectAsStateWithLifecycle()
@@ -1146,12 +1140,8 @@ fun ChatScreen(
                             .clip(RoundedCornerShape(10.dp))
                             .clickable {
                                 scope.launch { drawerState.close() }
-                                if (userEmail == null) {
-                                    viewModel.startGoogleSignIn(context)
-                                } else {
-                                    settingsInitialPage = SettingsPage.ACCOUNT
-                                    showSettingsBottomSheet = true
-                                }
+                                settingsInitialPage = SettingsPage.MAIN
+                                showSettingsBottomSheet = true
                             }
                     ) {
                         Row(
@@ -1162,50 +1152,34 @@ fun ChatScreen(
                                 modifier = Modifier
                                     .size(28.dp)
                                     .clip(CircleShape)
-                                    .background(if (userEmail != null) AntigravityGreen.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant),
+                                    .background(if (hasApiKey) AntigravityGreen.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant),
                                 contentAlignment = Alignment.Center
                             ) {
-                                if (!userPicture.isNullOrBlank()) {
-                                    AsyncImage(
-                                        model = userPicture,
-                                        contentDescription = userName,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                } else if (userEmail != null) {
-                                    Text(
-                                        text = (userName.takeIf { it.isNotBlank() } ?: "U").take(1).uppercase(),
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = AntigravityGreen
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Default.AccountCircle,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Default.VpnKey,
+                                    contentDescription = null,
+                                    tint = if (hasApiKey) AntigravityGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
                             }
                             Spacer(modifier = Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = if (userEmail != null) userName.ifBlank { "Google User" } else stringResource(R.string.account_sign_in_title),
+                                    text = stringResource(R.string.api_key_title),
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface,
                                     maxLines = 1
                                 )
                                 Text(
-                                    text = if (userEmail != null) stringResource(R.string.status_authenticated) else stringResource(R.string.account_tap_to_sign_in),
+                                    text = if (hasApiKey) "Gemini API key configured" else stringResource(R.string.api_key_optional_hint),
                                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = if (userEmail != null) stringResource(R.string.status_authenticated) else stringResource(R.string.account_btn_sign_in),
+                                contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                                 modifier = Modifier.size(16.dp)
                             )
@@ -1663,18 +1637,6 @@ fun ChatScreen(
                 viewModel.setModel(context, model, thinking, cliId)
             },
             onDismissRequest = { viewModel.dismissModelSelector() }
-        )
-    }
-
-    if (showAuthDialog) {
-        GoogleSignInDialog(
-            userEmail = userEmail,
-            userName = userName,
-            userPicture = userPicture,
-            isAuthenticating = isAuthenticating,
-            authError = authError,
-            onDismissRequest = { viewModel.dismissGoogleSignInDialog() },
-            onLaunchSignIn = { viewModel.startGoogleSignIn(context) }
         )
     }
 

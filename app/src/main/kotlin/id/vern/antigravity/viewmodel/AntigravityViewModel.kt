@@ -60,9 +60,6 @@ import id.vern.antigravity.service.TerminalSessionManager
 import id.vern.antigravity.executor.EngineExecutor
 import id.vern.antigravity.install.BootstrapInstaller
 import id.vern.antigravity.api.GeminiClient
-import id.vern.antigravity.oauth.OAuthManager
-import id.vern.antigravity.oauth.AccountManager
-import id.vern.antigravity.oauth.StoredAccount
 import id.vern.antigravity.service.CoreServerService
 import id.vern.antigravity.util.AppLogger
 import android.content.pm.PackageManager
@@ -249,14 +246,11 @@ class AntigravityViewModel : ViewModel() {
     val installedRulesList: StateFlow<List<RuleItem>> = settingsPreferencesDelegate.installedRulesList
     val mcpServers: StateFlow<List<McpServerItem>> = settingsPreferencesDelegate.mcpServers
 
-    val isAuthenticating: StateFlow<Boolean> = authDelegate.isAuthenticating
-    val authError: StateFlow<String?> = authDelegate.authError
-    val showGoogleSignInDialog: StateFlow<Boolean> = authDelegate.showGoogleSignInDialog
-    val pendingAuthUrl: StateFlow<String?> = authDelegate.pendingAuthUrl
-    val userEmail: StateFlow<String?> = authDelegate.userEmail
-    val userName: StateFlow<String> = authDelegate.userName
-    val userPicture: StateFlow<String?> = authDelegate.userPicture
-    val accounts: StateFlow<List<StoredAccount>> = authDelegate.accounts
+    // Google sign-in removed: the app is API-key only, so there is no account
+    // state to expose. Null/empty values keep older composables compiling.
+    val userEmail: StateFlow<String?> = MutableStateFlow(null)
+    val userName: StateFlow<String> = MutableStateFlow("")
+    val userPicture: StateFlow<String?> = MutableStateFlow(null)
 
     val projectList: StateFlow<List<File>> = projectWorkspaceDelegate.projectList
     val projectSortOrder: StateFlow<ProjectSortOrder> = projectWorkspaceDelegate.projectSortOrder
@@ -649,127 +643,22 @@ class AntigravityViewModel : ViewModel() {
         settingsPreferencesDelegate.saveRawMcpConfig(context, rawJson, viewModelScope, ::addLog, onComplete)
 
     fun refreshAuthState(context: Context) =
-        authDelegate.refreshAuthState(context, viewModelScope, ::refreshUserQuota)
+        authDelegate.refreshAuthState(context, ::refreshUserQuota)
 
-    fun switchAccount(context: Context, accountId: String) =
-        authDelegate.switchAccount(context, accountId, viewModelScope) {
-            mutableUserQuotaSummary.value = null
-            mutableCodeAssistTier.value = null
-            mutableCliModels.value = emptyList()
-            refreshAuthState(context)
-            CloudCodeQuotaService.restartLocalLanguageServer(context)
-            restartCoreService(context)
-            refreshUserQuota(context)
-            refreshCliModels(context, force = true)
-        }
+    /**
+     * Google sign-in and account switching were removed: this build only works
+     * with a Gemini API key. These stubs keep the settings UI call sites valid
+     * and simply route the user to the API-key dialog.
+     */
+    fun startGoogleSignIn(context: Context) {
+        authDelegate.showApiKeyDialog()
+    }
 
-    fun removeAccount(context: Context, accountId: String) =
-        authDelegate.removeAccount(context, accountId, viewModelScope) {
-            refreshAuthState(context)
-            val currentActive = AccountManager.getActiveAccount(context)
-            if (currentActive != null) {
-                mutableUserQuotaSummary.value = null
-                mutableCodeAssistTier.value = null
-                mutableCliModels.value = emptyList()
-                CloudCodeQuotaService.restartLocalLanguageServer(context)
-                restartCoreService(context)
-                refreshUserQuota(context)
-                refreshCliModels(context, force = true)
-            }
-        }
+    fun onActivityResume(context: Context) {
+        // Nothing to refresh: no OAuth session exists.
+    }
 
-    fun startGoogleSignIn(context: Context) =
-        authDelegate.startGoogleSignIn(
-            context = context,
-            scope = viewModelScope,
-            onSuccess = { email ->
-                mutableUserQuotaSummary.value = null
-                mutableCodeAssistTier.value = null
-                mutableCliModels.value = emptyList()
-                AgyModelsService.invalidateCache()
-                refreshAuthState(context)
-                CloudCodeQuotaService.restartLocalLanguageServer(context)
-                restartCoreService(context)
-                refreshCliModels(context, force = true)
-                addLog("Auth", "Google sign-in successful: $email")
-                Toast.makeText(context, context.getString(R.string.auth_signed_in_success, email ?: ""), Toast.LENGTH_SHORT).show()
-                viewModelScope.launch {
-                    delay(2500)
-                    refreshUserQuota(context)
-                }
-            },
-            onLog = ::addLog
-        )
 
-    fun onActivityResume(context: Context) =
-        authDelegate.onActivityResume(
-            context = context,
-            scope = viewModelScope,
-            onCheckUpdates = {
-                // Update system removed - no update checking
-            },
-            onAccountChangeDetected = { email ->
-                mutableUserQuotaSummary.value = null
-                mutableCodeAssistTier.value = null
-                mutableCliModels.value = emptyList()
-                AgyModelsService.invalidateCache()
-                CloudCodeQuotaService.restartLocalLanguageServer(context)
-                restartCoreService(context)
-                addLog("Auth", "Account switch detected on app resume: $email")
-                refreshAuthState(context)
-                refreshCliModels(context, force = true)
-            }
-        )
-
-    fun exchangeManualAuthCode(context: Context, rawCodeOrToken: String) =
-        authDelegate.exchangeManualAuthCode(
-            context = context,
-            rawCodeOrToken = rawCodeOrToken,
-            scope = viewModelScope,
-            onStdinSent = {
-                viewModelScope.launch {
-                    delay(1500)
-                    OAuthManager.checkAndImportExistingToken(context)
-                    refreshAuthState(context)
-                    restartCoreService(context)
-                }
-            },
-            onSuccess = { email ->
-                mutableUserQuotaSummary.value = null
-                mutableCodeAssistTier.value = null
-                mutableCliModels.value = emptyList()
-                AgyModelsService.invalidateCache()
-                refreshAuthState(context)
-                restartCoreService(context)
-                refreshCliModels(context, force = true)
-                addLog("Auth", "Google sign-in successful: $email")
-                Toast.makeText(context, context.getString(R.string.auth_signed_in_success, email ?: ""), Toast.LENGTH_SHORT).show()
-                viewModelScope.launch {
-                    delay(2500)
-                    refreshUserQuota(context)
-                }
-            },
-            onLog = ::addLog
-        )
-
-    fun signOutGoogle(context: Context) =
-        authDelegate.signOutGoogle(
-            context = context,
-            onSignedOut = {
-                mutableUserQuotaSummary.value = null
-                mutableCodeAssistTier.value = null
-                mutableCliModels.value = emptyList()
-                settingsPreferencesDelegate.setSelectedModelCliIdDirect(null)
-                settingsPreferencesDelegate.setSelectedModelDirect("")
-                settingsPreferencesDelegate.setThinkingBudgetDirect("")
-                CloudCodeQuotaService.restartLocalLanguageServer(context)
-                restartCoreService(context)
-            },
-            onLog = ::addLog
-        )
-
-    fun showGoogleSignInDialog() = authDelegate.showGoogleSignInDialog()
-    fun dismissGoogleSignInDialog() = authDelegate.dismissGoogleSignInDialog()
     fun showAccessibilityDialog() = authDelegate.showAccessibilityDialog()
     fun dismissAccessibilityDialog() = authDelegate.dismissAccessibilityDialog()
     val showAccessibilityDialog: StateFlow<Boolean> = authDelegate.showAccessibilityDialog
@@ -1142,6 +1031,11 @@ class AntigravityViewModel : ViewModel() {
     }
 
     val showApiKeyDialog: StateFlow<Boolean> = authDelegate.showApiKeyDialog
+
+    /** Opens the API-key dialog from any screen (used by the settings drawer). */
+    fun showApiKeyDialogExternal() {
+        authDelegate.showApiKeyDialog()
+    }
 
     fun dismissApiKeyDialog() {
         authDelegate.dismissApiKeyDialog()
@@ -1549,7 +1443,7 @@ class AntigravityViewModel : ViewModel() {
             val assistantMsg = ChatMessage(
                 id = UUID.randomUUID().toString(),
                 role = MessageRole.ASSISTANT,
-                content = context.getString(R.string.chat_auth_required_error),
+                content = "Add your Gemini API key in Settings to start using the agent.",
                 status = MessageStatus.SENT,
                 thinking = null
             )
@@ -1743,9 +1637,6 @@ class AntigravityViewModel : ViewModel() {
                         TerminalSessionManager.appendAgyLine("Working Directory: ${validWsDir.absolutePath}")
                     }
 
-                    OAuthManager.checkAndImportExistingToken(context)
-                    OAuthManager.refreshTokenIfNeeded(context)
-                    OAuthManager.syncCompanionStateFiles(context)
 
                     var activeCliConvId: String? = priorCliSession
                     var lastStreamUpdateMs = 0L
@@ -1824,9 +1715,10 @@ class AntigravityViewModel : ViewModel() {
                         val trimmed = line.trim()
                         val match = authUrlRegex.find(trimmed)
                         if (match != null) {
-                            val url = match.value
-                            authDelegate.setPendingAuthUrl(url)
-                            authDelegate.showGoogleSignInDialog()
+                            // Google sign-in is not part of this build. Surface the URL
+                            // as a log line so the user can still see what the engine
+                            // asked for, without opening any OAuth flow.
+                            addLog("Auth", "Engine requested Google auth (unsupported in this build): ${match.value}")
                         }
 
                         if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
@@ -2289,14 +2181,10 @@ class AntigravityViewModel : ViewModel() {
                         }
                     }
 
-                    authDelegate.setPendingAuthUrl(null)
-
                     if (exitCode == 0) {
-                        OAuthManager.checkAndImportExistingToken(context)
-                        OAuthManager.syncCompanionStateFiles(context)
                         refreshAuthState(context)
                     } else if (authRequired) {
-                        authDelegate.showGoogleSignInDialog()
+                        addLog("Auth", "Engine reported that authentication is required.", isError = true)
                     }
 
                     val elapsedSec = ((System.currentTimeMillis() - turnStartTime) / 1000).coerceAtLeast(1)
@@ -2356,7 +2244,8 @@ class AntigravityViewModel : ViewModel() {
 
                     val transcriptResponse = finalParsed.assistantResponse
                     val finalContent = if (exitCode != 0 && authRequired) {
-                        context.getString(R.string.chat_auth_required_error)
+                        "The engine asked for a Google account, which this build does not support. " +
+                            "Add a Gemini API key in Settings and try again."
                     } else if (outputSb.isNotEmpty()) {
                         outputSb.toString().trim()
                     } else if (!transcriptResponse.isNullOrBlank()) {
