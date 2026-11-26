@@ -47,6 +47,59 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
+      # ---------------------------------------------------------------------
+      # Bundle the runtime payload into the APK so first launch needs no
+      # 178 MB download over mobile data. Files land in app/src/main/assets/
+      # which Gradle packages as-is (AAPT does not compress already-packed
+      # archives because of the noCompress rule in build.gradle.kts).
+      # ---------------------------------------------------------------------
+      - name: Bundle bootstrap + core engine assets
+        run: |
+          set -e
+          mkdir -p app/src/main/assets
+          cd app/src/main/assets
+
+          echo "::group::bootstrap-aarch64.zip"
+          curl -sSL --retry 5 --retry-delay 5 --retry-all-errors -m 1200 \
+            -o bootstrap-aarch64.zip \
+            "https://github.com/KuatoDev/antigravity-bootstrap/releases/download/core-v1/bootstrap-aarch64.zip"
+          ls -l bootstrap-aarch64.zip
+          echo "sha256: $(sha256sum bootstrap-aarch64.zip | cut -d' ' -f1)"
+          echo "::endgroup::"
+
+          echo "::group::core engine manifest"
+          MANIFEST="https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_arm64.json"
+          curl -sS -m 60 -o /tmp/manifest.json "$MANIFEST"
+          cat /tmp/manifest.json
+          URL=$(python3 -c "import json;print(json.load(open('/tmp/manifest.json'))['url'])")
+          SHA=$(python3 -c "import json;print(json.load(open('/tmp/manifest.json'))['sha512'])")
+          VERSION=$(python3 -c "import json;print(json.load(open('/tmp/manifest.json'))['version'])")
+          echo "core version: $VERSION"
+          echo "::endgroup::"
+
+          echo "::group::core tarball"
+          curl -sSL --retry 5 --retry-delay 5 --retry-all-errors -m 1800 -o core-cli-linux-arm64.tar.gz "$URL"
+          ls -l core-cli-linux-arm64.tar.gz
+          ACTUAL=$(sha512sum core-cli-linux-arm64.tar.gz | cut -d' ' -f1)
+          if [ "$ACTUAL" != "$SHA" ]; then
+            echo "sha512 mismatch"; echo "expected $SHA"; echo "actual   $ACTUAL"; exit 1
+          fi
+          echo "core sha512 verified"
+          echo "::endgroup::"
+
+          # Record what got bundled so the app can show it and skip re-downloading.
+          printf 'version=%s\nsha512=%s\n' "$VERSION" "$SHA" > core-engine.txt
+          ls -lh .
+
+      - name: Verify bundled assets
+        run: |
+          set -e
+          cd app/src/main/assets
+          test -f bootstrap-aarch64.zip || { echo "bootstrap missing"; exit 1; }
+          test -f core-cli-linux-arm64.tar.gz || { echo "core tarball missing"; exit 1; }
+          tar -tzf core-cli-linux-arm64.tar.gz | head -3
+          du -sh bootstrap-aarch64.zip core-cli-linux-arm64.tar.gz
+
       - name: Configure signing
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}

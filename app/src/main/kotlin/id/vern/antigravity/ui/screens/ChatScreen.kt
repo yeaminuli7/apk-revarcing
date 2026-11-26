@@ -111,6 +111,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -136,6 +137,8 @@ import id.vern.antigravity.ui.theme.AntigravityBlue
 import id.vern.antigravity.ui.theme.AntigravityGreen
 import id.vern.antigravity.ui.theme.AntigravityRed
 import id.vern.antigravity.viewmodel.AntigravityViewModel
+import id.vern.antigravity.vision.ScreenAgent
+import id.vern.antigravity.vision.ScreenCaptureManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -163,6 +166,49 @@ fun ChatScreen(
     val thinkingBudget by viewModel.thinkingBudget.collectAsStateWithLifecycle()
     val verboseThinking by viewModel.verboseThinking.collectAsStateWithLifecycle()
     val hasApiKey = remember { GeminiClient.hasApiKey(context) }
+
+    // ---- on-device screen agent -------------------------------------------------
+    var screenControlEnabled by rememberSaveable {
+        mutableStateOf(GeminiClient.hasApiKey(context))
+    }
+    val screenAgentState by ScreenAgent.state.collectAsStateWithLifecycle()
+    val projectionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val data = result.data
+        if (result.resultCode == android.app.Activity.RESULT_OK && data != null) {
+            ScreenCaptureManager.setProjection(context, result.resultCode, data)
+        }
+    }
+
+    fun startScreenAgent(goal: String) {
+        if (!AccessibilityHelper.isServiceEnabled(context)) {
+            Toast.makeText(
+                context,
+                "Enable the Antigravity accessibility service first, then retry.",
+                Toast.LENGTH_LONG
+            ).show()
+            AccessibilityHelper.openSettings(context)
+            return
+        }
+        if (!ScreenCaptureManager.isReady()) {
+            // Ask for screen-capture permission, then run the agent once granted.
+            Toast.makeText(context, "Allow screen capture to let the agent see the screen.", Toast.LENGTH_LONG).show()
+            val mgr = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
+                as android.media.projection.MediaProjectionManager
+            projectionLauncher.launch(mgr.createScreenCaptureIntent())
+            return
+        }
+        val metrics = context.resources.displayMetrics
+        ScreenAgent.start(
+            context = context,
+            scope = scope,
+            goal = goal,
+            screenWidth = metrics.widthPixels,
+            screenHeight = metrics.heightPixels,
+            onLog = { line -> viewModel.addLog("Agent", line) }
+        )
+    }
     val showApiKeyDialogState by viewModel.showApiKeyDialog.collectAsStateWithLifecycle()
     val showAccessibilityDialogState by viewModel.showAccessibilityDialog.collectAsStateWithLifecycle()
     val showModelSelector by viewModel.showModelSelector.collectAsStateWithLifecycle()
@@ -1584,12 +1630,26 @@ fun ChatScreen(
                     externalInputText = pendingInputText,
                     onExternalInputTextConsumed = { viewModel.clearPendingInputText() },
                     onSendMessage = { text ->
-                        viewModel.sendMessage(context, text)
+                        if (screenControlEnabled) {
+                            startScreenAgent(text)
+                        } else {
+                            viewModel.sendMessage(context, text)
+                        }
                         scope.launch {
                             kotlinx.coroutines.delay(60)
                             runCatching {
                                 listState.scrollToItem(messages.size)
                             }
+                        }
+                    },
+                    screenAgentEnabled = screenControlEnabled,
+                    onToggleScreenAgent = {
+                        val next = !screenControlEnabled
+                        screenControlEnabled = next
+                        if (next && !ScreenCaptureManager.isReady()) {
+                            val mgr = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
+                                as android.media.projection.MediaProjectionManager
+                            projectionLauncher.launch(mgr.createScreenCaptureIntent())
                         }
                     },
                     onModelSelectorClick = { viewModel.showModelSelector() },
@@ -1639,6 +1699,60 @@ fun ChatScreen(
             },
             onDismissRequest = { viewModel.dismissModelSelector() }
         )
+    }
+
+    if (screenAgentState.running || screenAgentState.finished) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Column(modifier = Modifier.padding(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (screenAgentState.running) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text(
+                        text = if (screenAgentState.running)
+                            "Screen agent · step ${screenAgentState.step}"
+                        else if (screenAgentState.success) "Screen agent · done" else "Screen agent · stopped",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    if (screenAgentState.running) {
+                        TextButton(onClick = { ScreenAgent.stop() }) {
+                            Text("Stop")
+                        }
+                    } else {
+                        TextButton(onClick = { ScreenAgent.reset() }) {
+                            Text("Dismiss")
+                        }
+                    }
+                }
+                Text(
+                    text = screenAgentState.summary.ifBlank {
+                        screenAgentState.error ?: screenAgentState.status
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+                screenAgentState.lastAction.takeIf { it.isNotBlank() }?.let {
+                    Text(
+                        text = "last action: $it",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
     }
 
     if (showApiKeyDialogState) {

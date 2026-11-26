@@ -219,6 +219,23 @@ object BootstrapInstaller {
                 Log.w(TAG, "Local bootstrap at ${local.absolutePath} failed checksum verification, downloading from network")
             }
         }
+        // 1) Prefer the copy bundled inside the APK: first launch then needs no network.
+        val bundled = runCatching {
+            openAssetStream(context, "bootstrap-aarch64.zip", emptyList()).let { (stream, owner) ->
+                try {
+                    onProgress("Installing bundled Linux userspace...", 0.6f)
+                    stream.use { extractZipStream(it, targetDir) }
+                } finally {
+                    try { owner?.close() } catch (e: Exception) {}
+                }
+            }
+            true
+        }.getOrElse { e ->
+            Log.w(TAG, "Bundled bootstrap unavailable (${e.message}); falling back to download")
+            false
+        }
+        if (bundled) return
+
         val zipFile = File(context.cacheDir, "bootstrap-aarch64.zip")
         downloadVerified(BOOTSTRAP_URL, BOOTSTRAP_SHA256, zipFile) { p ->
             onProgress("Downloading Linux userspace bootstrap...", p * 0.85f)
@@ -358,6 +375,16 @@ object BootstrapInstaller {
     }
 
     private fun installCoreEngine(context: Context, onProgress: (String, Float) -> Unit) {
+        // The CI build packs the engine into the APK, so a normal install is offline.
+        if (CoreUpdateManager.hasBundledEngine(context)) {
+            AppLogger.d("Boot", "Installing core engine from bundled payload")
+            val bundled = CoreUpdateManager.installBundledEngine(context) { p, msg -> onProgress(msg, p) }
+            if (bundled.isSuccess) return
+            AppLogger.w("Boot", "Bundled engine install failed (${bundled.exceptionOrNull()?.message}); downloading")
+        } else {
+            AppLogger.d("Boot", "No bundled engine in this APK - downloading")
+        }
+
         val info = CoreUpdateManager.checkForUpdate(context)
         val result = CoreUpdateManager.downloadAndApply(context, info) { p, msg -> onProgress(msg, p) }
         if (result.isFailure) {

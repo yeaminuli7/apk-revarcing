@@ -3,33 +3,32 @@ package id.vern.antigravity.accessibility
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.annotation.SuppressLint
-import android.annotation.TargetApi
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
+import android.graphics.Path
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import android.graphics.Path
-import id.vern.antigravity.util.AppLogger
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.lang.ref.WeakReference
+import android.view.accessibility.AccessibilityWindowInfo
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * ScreenControlService - Accessibility Service for display control.
+ * ScreenControlService - accessibility bridge that lets the agent see and act on the screen
+ * the way a human does: look at what is on screen, then tap, type, scroll or swipe.
  *
- * This service allows the Antigravity AI agent to:
- * 1. Read screen content (AccessibilityNodeInfo tree)
- * 2. Perform tap/click gestures at specific coordinates
- * 3. Navigate between apps and system settings
- *
- * Optimized for Android 16 (API 36) while remaining compatible with older versions.
+ * Design notes
+ *  - The UI tree is flattened into stable, numbered node ids so the model can say
+ *    "tap 12" instead of guessing raw screen coordinates.
+ *  - Every action is blocking (it waits for the gesture to finish) so the agent loop can
+ *    capture a fresh screenshot right after acting.
+ *  - Works across apps: the service config no longer restricts packageNames.
  */
 class ScreenControlService : AccessibilityService() {
 
@@ -57,267 +56,308 @@ class ScreenControlService : AccessibilityService() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var isAutoClickEnabled = false
-    private var pendingTapX: Float = 0f
-    private var pendingTapY: Float = 0f
-    private var pendingTapCallback: ((Boolean) -> Unit)? = null
+
+    /** Nodes parsed by the most recent [describeScreen] call, indexed by the ids handed to the model. */
+    private val nodeCache = mutableMapOf<Int, AccessibilityNodeInfo>()
 
     override fun onCreate() {
         super.onCreate()
         instance = this
         isAutoClickEnabled = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getBoolean(KEY_AUTO_CLICK, false)
-        AppLogger.d(TAG, "ScreenControlService created")
+        Log.i(TAG, "ScreenControlService created")
     }
 
     override fun onDestroy() {
         instance = null
         super.onDestroy()
-        AppLogger.d(TAG, "ScreenControlService destroyed")
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        AppLogger.i(TAG, "Accessibility service connected")
-        ScreenControlService.setServiceEnabled(this, true)
+        setServiceEnabled(this, true)
+        Log.i(TAG, "Accessibility service connected")
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
-        AppLogger.i(TAG, "Accessibility service unbound")
-        ScreenControlService.setServiceEnabled(this, false)
+        setServiceEnabled(this, false)
         return super.onUnbind(intent)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Process accessibility events from the system
-        if (event == null) return
-
-        AppLogger.v(TAG, "Accessibility event: ${event.eventType}, package: ${event.packageName}")
-
-        // If we have a pending tap, try to execute it now that UI is ready
-        if (pendingTapCallback != null) {
-            mainHandler.postDelayed({
-                executePendingTap()
-            }, 500)
-        }
+        // Screen state is read on demand; events only keep the service alive.
     }
 
     override fun onInterrupt() {
-        AppLogger.w(TAG, "Accessibility service interrupted")
+        Log.w(TAG, "Accessibility service interrupted")
     }
 
     // ========================================================================
-    // Public API for the AI agent to control the display
+    // Reading the screen
     // ========================================================================
 
     /**
-     * Get the current screen hierarchy as a string for the AI agent to analyze.
-     * Returns clickable elements with their bounds and text.
+     * Describes the current screen as text for the model.
+     *
+     * Every interactive element gets a stable index (`[12]`) which can be passed to
+     * [clickNode] later. The text also carries type, label and bounds so the model can
+     * reason about layout even when it only has the tree.
      */
-    fun getScreenTree(): String {
-        val root = rootInActiveWindow
-        if (root == null) return "No accessibility tree available"
+    fun describeScreen(): String {
+        val sb = StringBuilder()
+        val windows = try {
+            windows
+        } catch (e: Exception) {
+            null
+        }
 
-        val builder = StringBuilder()
-        builder.append("Screen Tree:\n")
-        collectClickableNodes(root, builder, 0)
-        return builder.toString()
+        sb.append("Screen: ").append(packageNameOfActiveWindow()).append('\n')
+
+        nodeCache.values.forEach { try { it.recycle() } catch (e: Exception) {} }
+        nodeCache.clear()
+
+        var nextId = 1
+        if (windows != null && windows.isNotEmpty()) {
+            for (window in windows) {
+                if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) continue
+                val root = window.root ?: continue
+                sb.append("Window (layer ").append(window.layer).append(")\n")
+                nextId = collectNodes(root, sb, 0, nextId, window.isActive)
+            }
+        } else {
+            val root = rootInActiveWindow ?: return "No accessibility tree available"
+            nextId = collectNodes(root, sb, 0, nextId, true)
+        }
+
+        if (nodeCache.isEmpty()) sb.append("(no interactive elements found)\n")
+        return sb.toString()
     }
 
-    private fun collectClickableNodes(node: AccessibilityNodeInfo?, builder: StringBuilder, depth: Int) {
-        if (node == null) return
-        if (depth > 10) return // Prevent infinite recursion
+    private fun packageNameOfActiveWindow(): String {
+        val root = rootInActiveWindow
+        val pkg = root?.packageName?.toString()
+        return pkg ?: activeWindowPackage ?: "unknown"
+    }
 
-        val indent = "  ".repeat(depth)
-        val clickable = node.isClickable
-        val text = node.text?.toString() ?: ""
-        val contentDesc = node.contentDescription?.toString() ?: ""
-        val className = node.className?.toString() ?: ""
-        val bounds = android.graphics.Rect().also { node.getBoundsInScreen(it) }
+    @Volatile
+    private var activeWindowPackage: String? = null
 
-        if (clickable || text.isNotEmpty() || contentDesc.isNotEmpty()) {
-            builder.append("$indent[${className.split('.').last()}]")
-            if (text.isNotEmpty()) builder.append(" text=\"$text\"")
-            if (contentDesc.isNotEmpty()) builder.append(" desc=\"$contentDesc\"")
-            if (!bounds.isEmpty) {
-                builder.append(" bounds=[${bounds.left},${bounds.top},${bounds.right},${bounds.bottom}]")
+    private fun collectNodes(
+        node: AccessibilityNodeInfo?,
+        sb: StringBuilder,
+        depth: Int,
+        startId: Int,
+        inActiveWindow: Boolean
+    ): Int {
+        if (node == null || depth > 24) return startId
+
+        var nextId = startId
+        val text = node.text?.toString()?.trim().orEmpty()
+        val desc = node.contentDescription?.toString()?.trim().orEmpty()
+        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            node.hintText?.toString()?.trim().orEmpty()
+        } else ""
+        val isEditable = node.className?.contains("EditText") == true || node.isEditable
+        val interesting = node.isClickable || node.isLongClickable || isEditable ||
+            node.isScrollable || node.isCheckable || text.isNotEmpty() || desc.isNotEmpty()
+
+        if (interesting) {
+            val id = nextId++
+            try {
+                nodeCache[id] = AccessibilityNodeInfo.obtain(node)
+            } catch (e: Exception) {
             }
-            builder.append(" clickable=$clickable\n")
+
+            val bounds = android.graphics.Rect().also { node.getBoundsInScreen(it) }
+            sb.append('[').append(id).append("] ")
+
+            val role = when {
+                isEditable -> "input"
+                node.isScrollable -> "scroll"
+                node.isCheckable -> if (node.isChecked) "checked" else "checkbox"
+                node.isClickable -> "button"
+                else -> "text"
+            }
+            sb.append(role).append(' ')
+            if (text.isNotEmpty()) sb.append("text=\"").append(text.take(120)).append("\" ")
+            if (desc.isNotEmpty()) sb.append("desc=\"").append(desc.take(120)).append("\" ")
+            if (hint.isNotEmpty()) sb.append("hint=\"").append(hint.take(60)).append("\" ")
+            if (node.isEnabled.not()) sb.append("disabled ")
+            if (!inActiveWindow) sb.append("background ")
+            sb.append("at (").append(bounds.centerX()).append(',').append(bounds.centerY()).append(")\n")
         }
 
         for (i in 0 until node.childCount) {
-            collectClickableNodes(node.getChild(i), builder, depth + 1)
+            val child = try {
+                node.getChild(i)
+            } catch (e: Exception) {
+                null
+            }
+            nextId = collectNodes(child, sb, depth + 1, nextId, inActiveWindow)
         }
-
-        node.recycle()
+        return nextId
     }
 
-    /**
-     * Perform a tap at the given screen coordinates.
-     * Works on Android 7.0+ via AccessibilityService gesture API.
-     */
-    @SuppressLint("NewApi")
-    fun tapAt(x: Float, y: Float, callback: ((Boolean) -> Unit)? = null) {
-        pendingTapX = x
-        pendingTapY = y
-        pendingTapCallback = callback
+    /** Returns the currently focused editable node, if any. */
+    private fun focusedEditable(): AccessibilityNodeInfo? {
+        val root = rootInActiveWindow ?: return null
+        return root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+    }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            performTapGesture(x, y)
-        } else {
-            // Fallback for older versions
-            mainHandler.post {
-                callback?.invoke(false)
+    // ========================================================================
+    // Acting on the screen
+    // ========================================================================
+
+    /** Taps the node previously described with [id]. Returns false when it disappeared. */
+    fun clickNode(id: Int): Boolean {
+        val node = nodeCache[id]
+        if (node == null) {
+            Log.w(TAG, "clickNode($id): node no longer cached")
+            return false
+        }
+        var target: AccessibilityNodeInfo? = node
+        var guard = 0
+        while (target != null && !target.isClickable && guard < 8) {
+            target = target.parent
+            guard++
+        }
+        val clickable = target ?: node
+        val ok = try {
+            clickable.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        } catch (e: Exception) {
+            false
+        }
+        if (ok) return true
+        // Fall back to a coordinate tap, which works on custom-drawn views.
+        val rect = android.graphics.Rect().also { node.getBoundsInScreen(it) }
+        return tap(rect.centerX().toFloat(), rect.centerY().toFloat())
+    }
+
+    /** Blocking tap at absolute screen coordinates. */
+    fun tap(x: Float, y: Float, durationMs: Long = 60L): Boolean =
+        performGesture(x, y, x, y, durationMs, waitMs = 1200)
+
+    /** Blocking long press at absolute screen coordinates. */
+    fun longPress(x: Float, y: Float): Boolean =
+        performGesture(x, y, x, y, 700L, waitMs = 1800)
+
+    /** Swipe from one point to another; used for scrolling lists. */
+    fun swipe(fromX: Float, fromY: Float, toX: Float, toY: Float, durationMs: Long = 300L): Boolean =
+        performGesture(fromX, fromY, toX, toY, durationMs, waitMs = 1600)
+
+    /** Scrolls the largest scrollable container on screen in the given direction. */
+    fun scroll(direction: String, screenWidth: Int, screenHeight: Int): Boolean {
+        val cx = screenWidth / 2f
+        val cy = screenHeight / 2f
+        val delta = (screenHeight * 0.30f).toInt()
+        return when (direction.lowercase()) {
+            "down" -> swipe(cx, cy + delta, cx, cy - delta)
+            "up" -> swipe(cx, cy - delta, cx, cy + delta)
+            "right" -> swipe(cx + delta, cy, cx - delta, cy)
+            else -> swipe(cx - delta, cy, cx + delta, cy)
+        }
+    }
+
+    /** Types into the focused field, tapping [id] first when provided. */
+    fun typeInto(id: Int?, text: String): Boolean {
+        if (id != null) {
+            clickNode(id)
+            try {
+                Thread.sleep(350)
+            } catch (e: InterruptedException) {
             }
         }
-    }
-
-    @TargetApi(Build.VERSION_CODES.N)
-    private fun performTapGesture(x: Float, y: Float) {
-        val path = Path().apply {
-            moveTo(x, y)
-            lineTo(x, y)
-        }
-
-        val stroke = GestureDescription.StrokeDescription(
-            path,
-            0, // start time (ms)
-            100 // duration (ms)
-        )
-
-        val gesture = GestureDescription.Builder()
-            .addStroke(stroke)
-            .build()
-
-        dispatchGesture(gesture, object : AccessibilityService.GestureResultCallback() {
-            override fun onCompleted(gestureDescription: GestureDescription) {
-                super.onCompleted(gestureDescription)
-                mainHandler.post {
-                    pendingTapCallback?.invoke(true)
-                    pendingTapCallback = null
-                }
-            }
-
-            override fun onCancelled(gestureDescription: GestureDescription) {
-                super.onCancelled(gestureDescription)
-                mainHandler.post {
-                    pendingTapCallback?.invoke(false)
-                    pendingTapCallback = null
-                }
-            }
-        }, mainHandler)
-    }
-
-    private fun executePendingTap() {
-        if (pendingTapCallback != null) {
-            performTapGesture(pendingTapX, pendingTapY)
-        }
-    }
-
-    /**
-     * Type text into the currently focused field.
-     */
-    fun typeText(text: String) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            // Note: text injection is performed by the gateway via accessibility
-            // actions on the focused node; a gesture-only stub is intentional here.
-            val root = rootInActiveWindow
-            val focused = root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-            if (focused != null) {
-                val args = android.os.Bundle()
-                args.putCharSequence(
-                    AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                    text
-                )
+        val focused = focusedEditable()
+        if (focused != null) {
+            val args = Bundle()
+            args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+            val ok = try {
                 focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+            } catch (e: Exception) {
+                false
             }
+            if (ok) return true
+        }
+        // Node text injection not possible (custom canvas / IME): fall back to key events.
+        return sendTextAsKeys(text)
+    }
+
+    private fun sendTextAsKeys(text: String) {
+        val ime = getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+            ?: return false
+        // No public API to inject text without an input connection; report failure so the
+        // agent can retry with a different strategy.
+        Log.w(TAG, "typeInto fallback unavailable for text length ${text.length}")
+        return false
+    }
+
+    fun pressBack(): Boolean = performGlobalAction(GLOBAL_ACTION_BACK)
+    fun pressHome(): Boolean = performGlobalAction(GLOBAL_ACTION_HOME)
+    fun openRecentApps(): Boolean = performGlobalAction(GLOBAL_ACTION_RECENTS)
+    fun openNotifications(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
+        } else false
+    }
+
+    /** Launches an app by package name. */
+    fun openApp(packageName: String): Boolean {
+        return try {
+            val intent = packageManager.getLaunchIntentForPackage(packageName) ?: return false
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+            true
+        } catch (e: Exception) {
+            false
         }
     }
 
-    /**
-     * Navigate to system settings (e.g., battery saver).
-     */
-    fun openSettings(settingAction: String? = null) {
-        val intent = Intent(settingAction ?: Settings.ACTION_SETTINGS).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    @SuppressLint("NewApi")
+    private fun performGesture(
+        fromX: Float,
+        fromY: Float,
+        toX: Float,
+        toY: Float,
+        durationMs: Long,
+        waitMs: Long
+    ): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+
+        val path = Path().apply {
+            moveTo(fromX, fromY)
+            lineTo(toX, toY)
         }
-        startActivity(intent)
-    }
+        val stroke = GestureDescription.StrokeDescription(path, 0, durationMs.coerceAtLeast(1))
+        val gesture = GestureDescription.Builder().addStroke(stroke).build()
 
-    /**
-     * Open battery settings specifically.
-     */
-    fun openBatterySettings() {
-        val intent = when {
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-                Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)
-            }
-            else -> {
-                Intent(Settings.ACTION_SETTINGS)
-            }
-        }.apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        startActivity(intent)
-    }
+        val latch = CountDownLatch(1)
+        val success = AtomicBoolean(false)
 
-    /**
-     * Press system back button.
-     */
-    fun pressBack() {
-        performGlobalAction(GLOBAL_ACTION_BACK)
-    }
+        val dispatched = dispatchGesture(
+            gesture,
+            object : GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription) {
+                    success.set(true)
+                    latch.countDown()
+                }
 
-    /**
-     * Press home button.
-     */
-    fun pressHome() {
-        performGlobalAction(GLOBAL_ACTION_HOME)
-    }
-
-    /**
-     * Open recent apps.
-     */
-    fun openRecentApps() {
-        performGlobalAction(GLOBAL_ACTION_RECENTS)
-    }
-
-    /**
-     * Check if the accessibility service is enabled on the device.
-     */
-    fun isAccessibilityServiceEnabled(context: Context): Boolean {
-        val manager = context.getSystemService(Context.ACCESSIBILITY_SERVICE)
-            as android.view.accessibility.AccessibilityManager
-        val services = manager.getEnabledAccessibilityServiceList(
-            android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK
+                override fun onCancelled(gestureDescription: GestureDescription) {
+                    success.set(false)
+                    latch.countDown()
+                }
+            },
+            mainHandler
         )
-        return services.any { it.id == "${context.packageName}/${ScreenControlService::class.java.name}" }
-    }
-
-    /**
-     * Request the user to enable the accessibility service.
-     */
-    fun requestAccessibilitySettings(context: Context) {
-        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (!dispatched) return false
+        latch.await(waitMs, TimeUnit.MILLISECONDS)
+        // Give the UI a moment to settle so the next screenshot shows the result.
+        try {
+            Thread.sleep(250)
+        } catch (e: InterruptedException) {
         }
-        context.startActivity(intent)
+        return success.get()
     }
 
-    /**
-     * Take a screenshot and return it as a base64 string for Gemini vision analysis.
-     * This requires MediaProjection API (Android 5.0+).
-     * For simplicity, this returns a placeholder - the UI layer should handle screenshot capture.
-     */
-    fun captureScreenBase64(): String? {
-        // Screenshot capture requires MediaProjectionManager, which is an Activity-level API.
-        // This service cannot directly capture screenshots.
-        // The ChatScreen or MainActivity should handle this via MediaProjection.
-        return null
-    }
-
-    /**
-     * Enable or disable auto-click mode.
-     */
     fun setAutoClick(enabled: Boolean) {
         isAutoClickEnabled = enabled
         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -330,7 +370,7 @@ class ScreenControlService : AccessibilityService() {
 }
 
 /**
- * Utility to check if accessibility service is enabled and can be requested.
+ * Static helpers so callers do not need a live service instance just to check status.
  */
 object AccessibilityHelper {
 

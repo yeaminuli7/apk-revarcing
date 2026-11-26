@@ -101,6 +101,144 @@ object CoreUpdateManager {
         return false
     }
 
+    /** Asset name of the tarball bundled into the APK by the CI build. */
+    private const val BUNDLED_ASSET = "core-cli-linux-arm64.tar.gz"
+    private const val BUNDLED_META = "core-engine.txt"
+
+    /** True when this APK ships the engine payload, so first launch needs no download. */
+    fun hasBundledEngine(context: Context): Boolean = try {
+        context.assets.open(BUNDLED_ASSET).close()
+        true
+    } catch (e: Exception) {
+        false
+    }
+
+    private fun bundledVersion(context: Context): String = try {
+        context.assets.open(BUNDLED_META).bufferedReader().useLines { lines ->
+            lines.firstOrNull { it.startsWith("version=") }?.substringAfter("version=") ?: ""
+        }
+    } catch (e: Exception) {
+        ""
+    }
+
+    /**
+     * Installs the engine from the tarball packed inside the APK.
+     *
+     * Same end state as [downloadAndApply] but without any network traffic: extract the
+     * `antigravity` member, patch Android syscalls, install, smoke-test.
+     */
+    fun installBundledEngine(context: Context, onProgress: (Float, String) -> Unit): Result<String> {
+        val engineDir = BootstrapInstaller.engineDir(context)
+        val agyBin = File(engineDir, "bin/agy")
+        val ldBin = File(engineDir, "glibc/lib/ld-linux-aarch64.so.1")
+        val libDir = File(engineDir, "glibc/lib")
+        val prefixLib = File(BootstrapInstaller.prefixDir(context), "lib")
+        val stagingFile = File(context.cacheDir, "agy.staging")
+        val backupFile = File(engineDir, "bin/agy.bak")
+        val version = bundledVersion(context).ifBlank { "bundled" }
+
+        try {
+            onProgress(0.45f, "Extracting bundled core engine...")
+            val tmpTar = File(context.cacheDir, "core-bundled.tar.gz")
+            context.assets.open(BUNDLED_ASSET).use { input ->
+                FileOutputStream(tmpTar).use { out -> input.copyTo(out) }
+            }
+
+            var extracted = extractTarGzMember(tmpTar, "antigravity", stagingFile)
+            if (!extracted) {
+                val tarBin = File(BootstrapInstaller.prefixDir(context), "bin/tar")
+                if (tarBin.isFile) {
+                    ProcessBuilder(
+                        tarBin.absolutePath, "-xzf", tmpTar.absolutePath,
+                        "-C", context.cacheDir.absolutePath, "antigravity"
+                    ).start().waitFor()
+                    val fallbackFile = File(context.cacheDir, "antigravity")
+                    if (fallbackFile.isFile) {
+                        fallbackFile.copyTo(stagingFile, overwrite = true)
+                        fallbackFile.delete()
+                        extracted = true
+                    }
+                }
+            }
+            try { tmpTar.delete() } catch (e: Exception) {}
+
+            if (!extracted || !stagingFile.isFile || stagingFile.length() < 50_000_000L) {
+                return Result.failure(Exception("Bundled core binary could not be extracted"))
+            }
+
+            onProgress(0.72f, "Verifying bundled binary...")
+            val header = ByteArray(4)
+            FileInputStream(stagingFile).use { it.read(header) }
+            if (header[0] != 0x7F.toByte() || header[1] != 'E'.code.toByte() ||
+                header[2] != 'L'.code.toByte() || header[3] != 'F'.code.toByte()
+            ) {
+                return Result.failure(Exception("Bundled file is not a valid ELF binary"))
+            }
+
+            stagingFile.setReadable(true, false)
+            stagingFile.setExecutable(true, false)
+            try { Os.chmod(stagingFile.absolutePath, 493) } catch (e: Exception) {}
+
+            onProgress(0.80f, "Applying Android platform syscall patches...")
+            CoreBinaryPatcher.patchBinary(context, stagingFile)
+
+            onProgress(0.88f, "Installing core engine...")
+            if (agyBin.exists()) {
+                if (backupFile.exists()) backupFile.delete()
+                agyBin.copyTo(backupFile, overwrite = true)
+                agyBin.delete()
+            } else {
+                agyBin.parentFile?.mkdirs()
+            }
+            stagingFile.copyTo(agyBin, overwrite = true)
+            agyBin.setReadable(true, false)
+            agyBin.setExecutable(true, false)
+            try { Os.chmod(agyBin.absolutePath, 493) } catch (e: Exception) {}
+
+            val tmpAgy = File(context.filesDir, "tmp/engine/bin/agy")
+            if (tmpAgy.parentFile?.exists() == true) {
+                try {
+                    agyBin.copyTo(tmpAgy, overwrite = true)
+                    try { Os.chmod(tmpAgy.absolutePath, 493) } catch (e: Exception) {}
+                } catch (e: Exception) {}
+            }
+
+            BootstrapInstaller.patchGlibcResolvConf(context, engineDir)
+
+            onProgress(0.95f, "Running verification smoke test...")
+            val libPaths = listOf(libDir.absolutePath, prefixLib.absolutePath)
+                .filter { File(it).exists() }
+                .joinToString(":")
+            val pb = ProcessBuilder(ldBin.absolutePath, "--library-path", libPaths, agyBin.absolutePath, "--version")
+            pb.environment().remove("LD_PRELOAD")
+            val proc = pb.start()
+            val verifyOut = proc.inputStream.bufferedReader().readText().trim()
+            val exitCode = proc.waitFor()
+
+            if (exitCode != 0) {
+                Log.e(TAG, "Bundled engine smoke test failed ($exitCode: $verifyOut), rolling back")
+                if (backupFile.exists()) {
+                    backupFile.copyTo(agyBin, overwrite = true)
+                    try { Os.chmod(agyBin.absolutePath, 493) } catch (e: Exception) {}
+                }
+                return Result.failure(Exception("Smoke test failed: $verifyOut"))
+            }
+
+            if (backupFile.exists()) backupFile.delete()
+            if (stagingFile.exists()) stagingFile.delete()
+
+            // The bundled version is only a hint; the real one came from --version above.
+            val installed = verifyOut.ifBlank { version }
+            File(engineDir, ".engine_version").writeText(installed)
+
+            onProgress(1.0f, "Core engine installed from bundled payload (v$installed)")
+            return Result.success(installed)
+        } catch (e: Exception) {
+            Log.e(TAG, "Bundled engine install failed: ${e.message}", e)
+            return Result.failure(e)
+        }
+    }
+
     fun downloadAndApply(
         context: Context,
         updateInfo: CoreUpdateInfo,

@@ -3,10 +3,10 @@
     android:description="@string/accessibility_service_description"
     android:canRetrieveWindowContent="true"
     android:canPerformGestures="true"
-    android:canRequestEnhancedWebAccessibility="false"
+    android:canRequestEnhancedWebAccessibility="true"
     android:canRequestTouchExplorationMode="false"
-    android:accessibilityFlags="flagReportViewIds"
+    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews|flagRequestFilterKeyEvents"
     android:notificationTimeout="100"
-    android:packageNames="id.vern.antigravity"
     android:accessibilityFeedbackType="feedbackGeneric"
+    android:settingsActivity="id.vern.antigravity.ui.MainActivity"
     />
