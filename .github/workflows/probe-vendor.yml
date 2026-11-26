@@ -1,0 +1,71 @@
+name: Probe vendor engine
+
+on:
+  push:
+    paths:
+      - '.github/workflows/probe-vendor.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check vendor core artifacts
+        run: |
+          set -x
+          R=/tmp/report.txt
+          echo "=== manifest ===" >> $R
+          curl -sS -m 40 -o /tmp/m.json "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_arm64.json"
+          cat /tmp/m.json >> $R
+          URL=$(python3 -c "import json;print(json.load(open('/tmp/m.json'))['url'])")
+          curl -sSL -m 600 -o /tmp/core.tar.gz "$URL"
+          mkdir -p /tmp/ex && tar -xzf /tmp/core.tar.gz -C /tmp/ex
+          ls -l /tmp/ex >> $R
+
+          echo "=== vendored glibc (libc.so.6) ===" >> $R
+          strings -a /tmp/glibc/glibc/lib/libc.so.6 2>/dev/null | grep -E "GNU C Library|release version" | head -5 >> $R || true
+          mkdir -p /tmp/g && cd /tmp/g && unzip -oq "$GITHUB_WORKSPACE/app/src/main/assets/antigravity-glibc.zip"
+          strings -a /tmp/g/glibc/lib/libc.so.6 | grep -E "GNU C Library|release version" | head -5 >> $R
+
+          echo "=== REQUIRED symbol versions (highest) ===" >> $R
+          readelf -V /tmp/ex/antigravity 2>/dev/null | grep -oE "GLIBC_[0-9.]+" | sort -u -V | tail -5 >> $R
+
+          echo "=== PROVIDED by vendored libc ===" >> $R
+          readelf -V /tmp/g/glibc/lib/libc.so.6 2>/dev/null | grep -oE "GLIBC_[0-9.]+" | sort -u -V | tail -5 >> $R
+
+          echo "=== MISSING symbol versions ===" >> $R
+          comm -23 \
+            <(readelf -V /tmp/ex/antigravity 2>/dev/null | grep -oE "GLIBC_[0-9.]+" | sort -u) \
+            <(readelf -V /tmp/g/glibc/lib/libc.so.6 2>/dev/null | grep -oE "GLIBC_[0-9.]+" | sort -u) >> $R
+
+          cat $R
+
+      - name: Actually run the engine
+        run: |
+          {
+            echo "=== real run on native aarch64 ==="
+            chmod +x /tmp/g/glibc/lib/ld-linux-aarch64.so.1 /tmp/ex/antigravity
+            echo "--- via ld.so + library-path ---"
+            timeout 120 /tmp/g/glibc/lib/ld-linux-aarch64.so.1 \
+              --library-path /tmp/g/glibc/lib /tmp/ex/antigravity --version 2>&1 | head -20
+            echo "exit=${PIPESTATUS[0]}"
+            echo "--- via -L style (qemu not needed here) ---"
+            timeout 120 /tmp/ex/antigravity --version 2>&1 | head -20 || echo "direct exec failed (expected without interp)"
+          } >> /tmp/report.txt 2>&1
+          tail -30 /tmp/report.txt
+
+      - name: Commit report
+        if: always()
+        run: |
+          mkdir -p docs
+          cp /tmp/report.txt docs/vendor-report.txt 2>/dev/null || echo "no report" > docs/vendor-report.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f docs/vendor-report.txt
+          git commit -m "chore: vendor engine report [skip ci]" || true
+          git push origin "HEAD:${GITHUB_REF_NAME}" || true
