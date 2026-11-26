@@ -2,6 +2,7 @@ package id.vern.antigravity.api
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -74,7 +75,11 @@ object GeminiClient {
         val calls: List<ToolCall>,
         val error: String?,
         /** Raw model content JSON, sent back verbatim as history. */
-        val modelContent: JSONObject? = null
+        val modelContent: JSONObject? = null,
+        /** True when the API answered 429: wait, do not treat it as a fatal error. */
+        val rateLimited: Boolean = false,
+        /** Milliseconds the API asked us to wait, when it said so. */
+        val retryAfterMs: Long = 0L
     )
 
     // ---------- Simple text call (legacy, kept for existing callers) ----------
@@ -92,6 +97,24 @@ object GeminiClient {
             )
         }
 
+        // Gemini's free tier answers 429 when the per-minute quota runs out; wait it out.
+        var attempts = 0
+        var result = sendMessageOnce(context, apiKey, userMessage, systemInstruction)
+        while (result.error != null && attempts < 2 && isRateLimitText(result.error!!)) {
+            attempts++
+            delay(parseRetryDelayMs(result.error!!).coerceAtLeast(6_000L))
+            result = sendMessageOnce(context, apiKey, userMessage, systemInstruction)
+        }
+        result
+    }
+
+    /** One HTTP attempt for [sendMessage]; separated so the caller can retry on 429. */
+    private fun sendMessageOnce(
+        context: Context,
+        apiKey: String,
+        userMessage: String,
+        systemInstruction: String?
+    ): GeminiResponse {
         try {
             val model = getScreenModel(context)
             val url = URL("$BASE/$model:generateContent?key=$apiKey")
@@ -135,6 +158,10 @@ object GeminiClient {
             GeminiResponse(null, "Network error: ${e.message}")
         }
     }
+
+    private fun isRateLimitText(message: String): Boolean =
+        message.contains("429") || message.contains("quota", true) ||
+            message.contains("rate limit", true)
 
     // ---------- Vision + function calling (screen agent) ----------
 
@@ -195,7 +222,16 @@ object GeminiClient {
             val body = postJson(conn, root)
             val err = body.optJSONObject("error")
             if (err != null) {
-                return@withContext ToolTurn(null, emptyList(), err.optString("message"))
+                val msg = err.optString("message")
+                val code = err.optInt("code", 0)
+                return@withContext ToolTurn(
+                    null,
+                    emptyList(),
+                    msg,
+                    rateLimited = code == 429 || msg.contains("quota", ignoreCase = true) ||
+                        msg.contains("rate limit", ignoreCase = true),
+                    retryAfterMs = parseRetryDelayMs(msg)
+                )
             }
 
             val candidates = body.optJSONArray("candidates")
@@ -297,6 +333,17 @@ object GeminiClient {
     }
 
     // ---------- HTTP helpers ----------
+
+    /**
+     * Reads the wait time out of a 429 message, e.g. "Please retry in 4.94328827s".
+     * Returns 0 when the text carries no hint.
+     */
+    fun parseRetryDelayMs(message: String): Long {
+        val m = Regex("retry in ([0-9]+(?:[.][0-9]+)?)s", RegexOption.IGNORE_CASE).find(message)
+            ?: Regex("retryDelay\\W+([0-9]+)s", RegexOption.IGNORE_CASE).find(message)
+        val seconds = m?.groupValues?.getOrNull(1)?.toDoubleOrNull() ?: return 0L
+        return (seconds * 1000).toLong().coerceIn(1000L, 70_000L)
+    }
 
     private fun postJson(conn: HttpURLConnection, root: JSONObject): JSONObject {
         OutputStreamWriter(conn.outputStream).use {

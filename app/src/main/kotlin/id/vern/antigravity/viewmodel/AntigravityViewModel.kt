@@ -2209,7 +2209,10 @@ class AntigravityViewModel : ViewModel() {
                         val outputStr = outputSb.toString()
                         val keyMissing = outputStr.contains("GEMINI_API_KEY", ignoreCase = true) ||
                                 outputStr.contains("is not set", ignoreCase = true)
-                        authRequired = keyMissing ||
+                        val quotaExceeded = outputStr.contains("quota", ignoreCase = true) ||
+                                outputStr.contains("rate limit", ignoreCase = true) ||
+                                outputStr.contains("429", ignoreCase = true)
+                        authRequired = keyMissing || quotaExceeded ||
                                 outputStr.contains("authentication required", ignoreCase = true) ||
                                 outputStr.contains("authentication failed", ignoreCase = true) ||
                                 outputStr.contains("visit the url to log in", ignoreCase = true) ||
@@ -2290,7 +2293,17 @@ class AntigravityViewModel : ViewModel() {
                     }
 
                     val transcriptResponse = finalParsed.assistantResponse
-                    val finalContent = if (exitCode != 0 && authRequired) {
+                    val quotaHit = outputSb.toString().let {
+                        it.contains("quota", ignoreCase = true) ||
+                            it.contains("rate limit", ignoreCase = true) ||
+                            it.contains("429", ignoreCase = true)
+                    }
+                    val finalContent = if (exitCode != 0 && quotaHit) {
+                        "Gemini's free tier limit was reached. The free plan allows only a few " +
+                            "requests per minute, and the agent needs one per step. Wait about a " +
+                            "minute and send the message again, or switch to a shorter task. " +
+                            "For higher limits, enable billing in Google AI Studio."
+                    } else if (exitCode != 0 && authRequired) {
                         if (GeminiClient.getApiKey(context).isNullOrBlank()) {
                             "No Gemini API key found. Open Settings > API Key, paste a key from " +
                                 "Google AI Studio, and send the message again."

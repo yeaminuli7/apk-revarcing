@@ -7,6 +7,7 @@ import id.vern.antigravity.api.GeminiClient
 import id.vern.antigravity.util.AppLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,6 +33,23 @@ object ScreenAgent {
 
     /** Hard stop so a confused model cannot tap forever. */
     const val MAX_STEPS = 25
+
+    /**
+     * The free Gemini tier allows only a handful of requests per minute, so the agent
+     * paces itself instead of firing 25 requests back to back.
+     */
+    private const val MIN_REQUEST_INTERVAL_MS = 4_500L
+
+    /** On 429 we wait, then retry the same step instead of dying. */
+    private const val MAX_RATE_LIMIT_RETRIES = 4
+    private const val DEFAULT_RETRY_MS = 8_000L
+
+    /**
+     * Only the last N observations keep their screenshot. Older screenshots are dropped
+     * from the history so every request stays small (the tree text is enough to recall
+     * what happened before).
+     */
+    private const val SCREENSHOT_WINDOW = 2
 
     private val systemPrompt = """
         You are Antigravity, an on-device Android agent. You control a real phone the way a
@@ -233,6 +251,7 @@ object ScreenAgent {
             val history = JSONArray()
             var step = 0
             var finished = false
+            var lastRequestAt = 0L
 
             try {
                 while (step < MAX_STEPS && !finished) {
@@ -250,16 +269,47 @@ object ScreenAgent {
                     history.put(
                         GeminiClient.buildObservationParts(goal, screenText, shot, step)
                     )
+                    trimOldScreenshots(history)
 
-                    val turn = GeminiClient.screenAgentTurn(
-                        context = context,
-                        history = history,
-                        screenshotJpegBase64 = null, // already embedded in the observation part
-                        screenText = screenText,
-                        userGoal = goal,
-                        systemInstruction = systemPrompt,
-                        tools = toolDeclarations()
-                    )
+                    // Pace requests so the free tier's per-minute quota is respected.
+                    val sinceLast = System.currentTimeMillis() - lastRequestAt
+                    if (lastRequestAt > 0 && sinceLast < MIN_REQUEST_INTERVAL_MS) {
+                        delay(MIN_REQUEST_INTERVAL_MS - sinceLast)
+                    }
+
+                    var turn = GeminiClient.ToolTurn(null, emptyList(), null)
+                    var attempt = 0
+                    while (true) {
+                        lastRequestAt = System.currentTimeMillis()
+                        turn = GeminiClient.screenAgentTurn(
+                            context = context,
+                            history = history,
+                            screenshotJpegBase64 = null, // already embedded in the observation part
+                            screenText = screenText,
+                            userGoal = goal,
+                            systemInstruction = systemPrompt,
+                            tools = toolDeclarations()
+                        )
+                        if (!turn.rateLimited) break
+                        if (attempt >= MAX_RATE_LIMIT_RETRIES) {
+                            mutableState.value = mutableState.value.copy(
+                                running = false,
+                                finished = true,
+                                success = false,
+                                summary = "Gemini's free quota is used up for the moment.",
+                                error = quotaMessage(turn.retryAfterMs),
+                                status = "Rate limited"
+                            )
+                            return@launch
+                        }
+                        attempt++
+                        val wait = if (turn.retryAfterMs > 0) turn.retryAfterMs else DEFAULT_RETRY_MS
+                        mutableState.value = mutableState.value.copy(
+                            status = "Free-tier limit reached - waiting ${wait / 1000}s (retry $attempt/$MAX_RATE_LIMIT_RETRIES)…"
+                        )
+                        onLog("rate limited, waiting ${wait}ms before retry $attempt")
+                        delay(wait)
+                    }
 
                     if (turn.error != null) {
                         mutableState.value = mutableState.value.copy(
@@ -337,6 +387,45 @@ object ScreenAgent {
                 )
             }
         }
+    }
+
+    /**
+     * Drops the image part from every observation older than [SCREENSHOT_WINDOW], keeping
+     * the text (goal + accessibility tree) so the model still remembers what it did.
+     */
+    private fun trimOldScreenshots(history: JSONArray) {
+        val observationIndexes = mutableListOf<Int>()
+        for (i in 0 until history.length()) {
+            val entry = history.optJSONObject(i) ?: continue
+            val parts = entry.optJSONArray("parts") ?: continue
+            for (j in 0 until parts.length()) {
+                val part = parts.optJSONObject(j) ?: continue
+                if (part.has("inline_data")) {
+                    observationIndexes.add(i)
+                    break
+                }
+            }
+        }
+        val keepFrom = (observationIndexes.size - SCREENSHOT_WINDOW).coerceAtLeast(0)
+        for (k in 0 until keepFrom) {
+            val idx = observationIndexes[k]
+            val entry = history.optJSONObject(idx) ?: continue
+            val parts = entry.optJSONArray("parts") ?: continue
+            val kept = JSONArray()
+            for (j in 0 until parts.length()) {
+                val part = parts.optJSONObject(j) ?: continue
+                if (!part.has("inline_data")) kept.put(part)
+            }
+            entry.put("parts", kept)
+        }
+    }
+
+    /** Human readable rate-limit explanation, instead of Google's raw JSON error. */
+    private fun quotaMessage(retryAfterMs: Long): String {
+        val wait = if (retryAfterMs > 0) "${(retryAfterMs / 1000).coerceAtLeast(1)} seconds" else "about a minute"
+        return "The free Gemini API tier allows only a few requests per minute and the screen " +
+            "agent needs one per step. Wait $wait and try again, use a shorter task, or enable " +
+            "billing in Google AI Studio for a higher limit."
     }
 
     private data class Outcome(val response: JSONObject)
