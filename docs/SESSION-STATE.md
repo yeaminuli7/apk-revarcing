@@ -1,9 +1,9 @@
 # Session state — API-key only + on-device screen agent + bubble + voice
 
-## Status: SHIPPED as build-36 (184 MB APK)
+## Status: SHIPPED as build-38 (184 MB APK)
 
-Release: https://github.com/yeaminuli7/apk-revarcing/releases/download/build-36/Antigravity-1.0.1-release.apk
-Branch `arena/6d2e1f67-apk-revarcing`, HEAD `3ae32ac`, run 45747798841 success.
+Release: https://github.com/yeaminuli7/apk-revarcing/releases/download/build-38/Antigravity-1.0.1-release.apk
+Branch `arena/6d2e1f67-apk-revarcing`, HEAD `221cbd2`, run 45764096838 success.
 
 ### 1) Google login removed (API key only) — done
 - Deleted `oauth/OAuthManager.kt`, `oauth/AccountManager.kt`, `ui/components/GoogleSignInDialog.kt`
@@ -126,3 +126,28 @@ User must pick **"Entire screen"** once; "Share one app" limits capture to that 
 - The wake word cannot be heard while the phone is fully locked (Android blocks mic for
   background apps); it works while the screen is on or the app is in the foreground.
 - No screenshot preview in chat yet; `lastScreenshotBase64` is captured but not rendered.
+
+
+## Round 3 (build-38) — chat regression + Messenger-style bubble
+
+### Root cause of "chat messages are missing"
+`ChatScreen` initialised `screenControlEnabled` with `GeminiClient.hasApiKey(context)` — i.e.
+**ON for everyone**. With it on, `onSendMessage` called `startScreenAgent(text)` and never
+`viewModel.sendMessage(...)`, so no `ChatMessage` was ever appended: the transcript stayed
+empty. Fixed by defaulting the toggle to `false`. The agent is opt-in per message via the
+"Screen" pill, and when it does run the goal + summary are now written into the real
+conversation through the new `AntigravityViewModel.appendConversationMessages(context,
+userText, assistantText)` (also used by the bubble path).
+
+### Bubble is now a chat head (not a command bar)
+- 48 dp circle, online dot, press scale animation, draggable with saved position.
+- Tap opens a floating **chat sheet** (360 dp, bottom): scrollable transcript with
+  user/assistant bubbles, a "…" typing line that becomes `Step N: <action>…` while the
+  agent works, then is replaced by the final answer; text field, mic button, ✕ close.
+- Voice commands open the sheet automatically and are echoed there, so both input paths
+  look the same. `handleUserInput(text, openSheetIfClosed)` is the single entry point.
+
+### Notes / still open
+- The floating sheet transcript is in-memory (max 30 entries); it is not persisted across
+  service restarts. The mirrored copy in the main app conversation IS persisted.
+- `AvatarSvg` etc. untouched. Chat bubbles render via `ChatBubble` in `items(messages)`.
