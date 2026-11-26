@@ -1,0 +1,27 @@
+++ '[' -n '' ']'
+++ echo NO
++ echo '=== key present: NO ==='
+=== key present: NO ===
++ echo '=== models list (key mode) ==='
+=== models list (key mode) ===
++ run_agy models
++ env HOME=/tmp/home GEMINI_API_KEY= /tmp/g/glibc/lib/ld-linux-aarch64.so.1 --library-path /tmp/g/glibc/lib /tmp/ex/antigravity models
++ tail -40
+modelProvider is set to "gemini" in settings.json, but the GEMINI_API_KEY environment variable is not set. Set GEMINI_API_KEY to your Gemini API key, or remove "modelProvider" from settings.json to use the default backend.
++ echo '=== real prompt: write a file ==='
+=== real prompt: write a file ===
++ mkdir -p /tmp/ws
++ cd /tmp/ws
++ run_agy -p 'Create a file hello.py that prints hello, then run it.' --dangerously-skip-permissions --add-dir /tmp/ws
++ env HOME=/tmp/home GEMINI_API_KEY= /tmp/g/glibc/lib/ld-linux-aarch64.so.1 --library-path /tmp/g/glibc/lib /tmp/ex/antigravity -p 'Create a file hello.py that prints hello, then run it.' --dangerously-skip-permissions --add-dir /tmp/ws
++ tail -40
+modelProvider is set to "gemini" in settings.json, but the GEMINI_API_KEY environment variable is not set. Set GEMINI_API_KEY to your Gemini API key, or remove "modelProvider" from settings.json to use the default backend.
++ echo '=== workspace contents ==='
+=== workspace contents ===
++ ls -la /tmp/ws
+total 8
+drwxr-xr-x  2 runner runner 4096 Nov 26 08:23 .
+drwxrwxrwt 17 root   root   4096 Nov 26 08:23 ..
++ echo '=== hello.py ==='
+=== hello.py ===
++ cat /tmp/ws/hello.py
