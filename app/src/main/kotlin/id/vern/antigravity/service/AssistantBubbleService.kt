@@ -66,7 +66,28 @@ class AssistantBubbleService : Service() {
 
         fun isShowing(): Boolean = isRunning
 
+        /** True when the app may draw over other apps. */
+        fun canDrawOverlays(context: Context): Boolean =
+            android.provider.Settings.canDrawOverlays(context)
+
+        fun openOverlayPermission(context: Context) {
+            try {
+                context.startActivity(
+                    Intent(
+                        android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        android.net.Uri.parse("package:${context.packageName}")
+                    ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+                )
+            } catch (e: Exception) {
+            }
+        }
+
         fun show(context: Context) {
+            if (!canDrawOverlays(context)) {
+                Toast.makeText(context, "Allow \"Display over other apps\" first", Toast.LENGTH_LONG).show()
+                openOverlayPermission(context)
+                return
+            }
             val intent = Intent(context, AssistantBubbleService::class.java).apply {
                 action = ACTION_SHOW
             }
@@ -113,7 +134,10 @@ class AssistantBubbleService : Service() {
                 stopSelf()
                 return START_NOT_STICKY
             }
-            else -> showBubble()
+            else -> {
+                showBubble()
+                autoStartVoice()
+            }
         }
         return START_STICKY
     }
@@ -441,6 +465,26 @@ class AssistantBubbleService : Service() {
                 }
             }
         }
+    }
+
+    /**
+     * Voice is on by default when the bubble starts, so the agent can be commanded with
+     * "Hey Antigravity …" at any time - the way a phone assistant behaves.
+     */
+    private fun autoStartVoice() {
+        if (VoiceController.isListening()) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            Toast.makeText(
+                this,
+                "Allow microphone in Antigravity to use voice control",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+        VoiceController.start(this)
     }
 
     private fun toggleVoice() {

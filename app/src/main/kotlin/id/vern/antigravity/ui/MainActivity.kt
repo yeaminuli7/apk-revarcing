@@ -46,6 +46,28 @@ class MainActivity : ComponentActivity() {
         viewModel.loadPreferences(this)
         enableEdgeToEdge()
 
+        // Microphone is needed for always-on voice control ("Hey Antigravity").
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) !=
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 501)
+            }
+        }
+
+        // Ask to be excluded from battery optimisation: without this the OS may kill the
+        // engine service and the floating bubble while the screen is off.
+        try {
+            val pm = getSystemService(android.os.PowerManager::class.java)
+            if (pm != null && !pm.isIgnoringBatteryOptimizations(packageName)) {
+                val intent = android.content.Intent(
+                    android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+                ).apply { data = android.net.Uri.parse("package:$packageName") }
+                startActivity(intent)
+            }
+        } catch (e: Exception) {
+        }
+
         setContent {
             val appearance by viewModel.appearanceConfig.collectAsStateWithLifecycle()
             val themePreset by viewModel.themePreset.collectAsStateWithLifecycle()
