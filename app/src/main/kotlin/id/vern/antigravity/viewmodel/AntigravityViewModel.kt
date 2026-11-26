@@ -966,6 +966,18 @@ class AntigravityViewModel : ViewModel() {
                 return@launch
             }
 
+            val engineProblem = BootstrapInstaller.engineProblem(context)
+            if (engineProblem != null) {
+                val detail = "Core engine is not usable: $engineProblem"
+                mutableBootError.value = detail
+                mutableBootErrorDetail.value =
+                    "The agy binary could not be installed. Check your internet connection and tap Retry. " +
+                        "If it keeps failing, reinstall the app."
+                addLog("Boot", detail, isError = true)
+                mutableIsBooting.value = false
+                return@launch
+            }
+
             mutableSetupProgress.value = 0.90f
             mutableBootStatusText.value = "Starting Antigravity Core Service..."
             addLog("Boot", "Launching CoreServerService (port 45158 & 45161)...")

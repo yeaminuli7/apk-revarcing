@@ -55,7 +55,9 @@ object BootstrapInstaller {
         val ldBin = File(engine, "glibc/lib/ld-linux-aarch64.so.1")
 
         val prefixOk = bash.isFile && sh.exists() && marker.isFile
-        val engineOk = agyBin.isFile && ldBin.isFile
+        // A truncated or zero length agy is not "installed": the dynamic loader then reports
+        // ".../engine/bin/agy: cannot open shared object file" and boot dies in the shell.
+        val engineOk = agyBin.isFile && agyBin.length() > 1_000_000L && ldBin.isFile && ldBin.length() > 100_000L
 
         return prefixOk && engineOk
     }
@@ -73,6 +75,7 @@ object BootstrapInstaller {
             ensurePermissions(context)
             deployOverlayAndTools(context, prefix, engine)
             createAgyWrapper(filesDir, prefix, engine)
+            healEngineIfMissing(context) { msg, p -> onProgress(msg, p) }
             return@withContext true
         }
 
@@ -107,6 +110,8 @@ object BootstrapInstaller {
             File(prefix, MARKER_FILE).writeText(
                 "installed=true\ntimestamp=${System.currentTimeMillis()}\narch=aarch64\n"
             )
+
+            verifyEngine(context)
 
             val errFile = getErrorLogFile(context)
             if (errFile.exists()) errFile.delete()
@@ -269,8 +274,67 @@ object BootstrapInstaller {
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
+    /**
+     * Returns a human readable reason why the core engine is unusable, or null when it is fine.
+     * A zero length / non-ELF `engine/bin/agy` triggers the confusing loader error
+     * "error while loading shared libraries: .../agy: cannot open shared object file".
+     */
+    fun engineProblem(context: Context): String? {
+        val engine = engineDir(context)
+        val agy = File(engine, "bin/agy")
+        val ld = File(engine, "glibc/lib/ld-linux-aarch64.so.1")
+        if (!ld.isFile || ld.length() < 100_000L) {
+            return "glibc loader missing (${ld.absolutePath})"
+        }
+        if (!agy.isFile) return "core engine binary missing (${agy.absolutePath})"
+        if (agy.length() < 1_000_000L) return "core engine binary is truncated (${agy.length()} bytes)"
+        val header = ByteArray(4)
+        try {
+            java.io.FileInputStream(agy).use { it.read(header) }
+        } catch (e: Exception) {
+            return "core engine binary unreadable: ${e.message}"
+        }
+        if (header[0] != 0x7F.toByte() || header[1] != 'E'.code.toByte() ||
+            header[2] != 'L'.code.toByte() || header[3] != 'F'.code.toByte()
+        ) {
+            return "core engine binary is not an ELF executable"
+        }
+        if (!agy.canExecute()) return "core engine binary is not executable"
+        return null
+    }
+
+    private suspend fun healEngineIfMissing(context: Context, onProgress: (String, Float) -> Unit) {
+        val problem = engineProblem(context)
+        if (problem == null) {
+            AppLogger.d("Boot", "Core engine verified: ${File(engineDir(context), "bin/agy").length()} bytes")
+            return
+        }
+        AppLogger.w("Boot", "Core engine check failed ($problem) - reinstalling")
+        try {
+            installCoreEngine(context) { msg, p -> onProgress(msg, 0.6f + p * 0.3f) }
+            val after = engineProblem(context)
+            if (after != null) AppLogger.e("Boot", "Core engine still unusable after reinstall: $after")
+            else AppLogger.d("Boot", "Core engine repaired")
+        } catch (e: Exception) {
+            AppLogger.e("Boot", "Core engine reinstall failed: ${e.message}")
+        }
+    }
+
+    private fun verifyEngine(context: Context) {
+        val problem = engineProblem(context)
+        if (problem != null) {
+            AppLogger.e("Boot", "Engine verification failed after install: $problem")
+        } else {
+            AppLogger.d("Boot", "Engine verified, agy=${File(engineDir(context), "bin/agy").length()} bytes")
+        }
+    }
+
     private fun installCoreEngine(context: Context, onProgress: (String, Float) -> Unit) {
-        onProgress("Core engine already bundled with bootstrap", 1.0f)
+        val info = CoreUpdateManager.checkForUpdate(context)
+        val result = CoreUpdateManager.downloadAndApply(context, info) { p, msg -> onProgress(msg, p) }
+        if (result.isFailure) {
+            throw IllegalStateException(result.exceptionOrNull()?.message ?: "Core engine download failed")
+        }
     }
 
     private fun extractGlibc(context: Context, targetDir: File) {
