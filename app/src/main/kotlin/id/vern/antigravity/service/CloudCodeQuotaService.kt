@@ -1028,7 +1028,8 @@ object CloudCodeQuotaService {
     }
 
     suspend fun fetchCodeAssistTier(context: Context): CodeAssistTier? = withContext(Dispatchers.IO) {
-        val token: String? = null // Google OAuth removed: API-key builds have no session ?: return@withContext null
+        val token: String? = null // Google OAuth removed: API-key builds have no session
+        if (token == null) return@withContext null
 
         try {
             val respStr = makePostRequestWithFallback(TIER_PATH, token) ?: return@withContext null
