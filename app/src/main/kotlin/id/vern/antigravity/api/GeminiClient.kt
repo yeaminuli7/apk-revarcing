@@ -153,9 +153,9 @@ object GeminiClient {
             )
 
             val body = postJson(conn, root)
-            parseText(body)
+            return parseText(body)
         } catch (e: Exception) {
-            GeminiResponse(null, "Network error: ${e.message}")
+            return GeminiResponse(null, "Network error: ${e.message}")
         }
     }
 
