@@ -15,23 +15,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download latest release APK and list big entries
+      - name: Inspect latest APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -x
           TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName')
-          echo "tag=$TAG"
           gh release download "$TAG" --pattern "*.apk" --dir /tmp/apk
-          ls -l /tmp/apk
           A=$(ls /tmp/apk/*.apk | head -1)
           {
-            echo "=== apk size ==="
+            echo "tag=$TAG"
             ls -lh "$A"
-            echo "=== assets entries (name, uncompressed, method) ==="
-            unzip -lv "$A" | awk 'NR<4 || /assets\/(bootstrap|core|antigravity-glibc)/'
-            echo "=== duplicate name check ==="
-            unzip -l "$A" | awk '{print $4}' | sort | uniq -d | head -20
+            echo "=== bundled payload entries ==="
+            unzip -lv "$A" | awk 'NR<3 || /assets\/(bootstrap|core_|core-|antigravity-glibc)/'
+            echo "=== integrity of the engine payload inside the apk ==="
+            unzip -p "$A" assets/core_engine_payload > /tmp/payload.tar.gz
+            ls -l /tmp/payload.tar.gz
+            sha512sum /tmp/payload.tar.gz
+            echo "declared:"; cat app/src/main/assets/core-engine.txt 2>/dev/null || true
+            echo "=== gzip test + member list ==="
+            gzip -t /tmp/payload.tar.gz && echo "gzip OK"
+            tar -tzf /tmp/payload.tar.gz
           } > /tmp/report.txt 2>&1
           cat /tmp/report.txt
 
