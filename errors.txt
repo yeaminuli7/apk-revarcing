@@ -1,0 +1,3 @@
+e: app/src/main/kotlin/id/vern/antigravity/service/CloudCodeQuotaService.kt:1034:66 Argument type mismatch: actual type is 'kotlin.String?', but 'kotlin.String' was expected.
+e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ChatScreen.kt:1159:65 Unresolved reference 'VpnKey'.
+e: app/src/main/kotlin/id/vern/antigravity/ui/screens/SettingsScreen.kt:442:49 Unresolved reference 'VpnKey'.
