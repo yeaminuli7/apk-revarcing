@@ -1460,6 +1460,49 @@ class AntigravityViewModel : ViewModel() {
         executeAiTurn(context, effectiveContent, convId, currentAttachments)
     }
 
+    /**
+     * Appends a message pair to the current conversation without touching the engine.
+     * Used by the floating bubble and the screen agent so their results appear in the
+     * normal chat transcript, exactly like a typed message would.
+     */
+    fun appendConversationMessages(
+        context: Context,
+        userText: String,
+        assistantText: String
+    ) {
+        val userMsg = ChatMessage(
+            id = UUID.randomUUID().toString(),
+            role = MessageRole.USER,
+            content = userText,
+            status = MessageStatus.SENT,
+            thinking = null
+        )
+        val assistantMsg = ChatMessage(
+            id = UUID.randomUUID().toString(),
+            role = MessageRole.ASSISTANT,
+            content = assistantText,
+            status = MessageStatus.SENT,
+            thinking = null
+        )
+        val updated = mutableChatMessages.value + userMsg + assistantMsg
+        mutableChatMessages.value = updated
+        try {
+            var convId = activeConversationId.value
+            if (convId == null) {
+                convId = UUID.randomUUID().toString()
+                conversationManagerDelegate.setActiveConversationIdDirect(convId)
+            }
+            saveConversationHistory(context)
+            saveMessagesForConversation(context, convId, updated)
+            conversationManagerDelegate.updateConversationHistoryDirect { list ->
+                list.map { if (it.id == convId) it.copy(messageCount = updated.size) else it }
+            }
+            saveConversationHistory(context)
+        } catch (e: Exception) {
+            addLog("Chat", "Could not persist agent message: ${e.message}")
+        }
+    }
+
     private val executionWakeLock = WakeLockHolder()
     private var currentAiExecutionJob: Job? = null
 

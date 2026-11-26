@@ -171,10 +171,32 @@ fun ChatScreen(
     val hasApiKey = remember { GeminiClient.hasApiKey(context) }
 
     // ---- on-device screen agent -------------------------------------------------
-    var screenControlEnabled by rememberSaveable {
-        mutableStateOf(GeminiClient.hasApiKey(context))
-    }
+    // OFF by default on purpose: with it on, every message was routed to the screen
+    // agent and nothing was appended to the conversation, which looked like the chat
+    // was broken (no bubbles at all).
+    var screenControlEnabled by rememberSaveable { mutableStateOf(false) }
     val screenAgentState by ScreenAgent.state.collectAsStateWithLifecycle()
+    var lastAgentGoal by rememberSaveable { mutableStateOf("") }
+    var agentReported by remember { mutableStateOf(false) }
+
+    // When the agent finishes, write the exchange into the normal chat transcript so the
+    // conversation keeps a history of what was asked and what the phone did.
+    LaunchedEffect(screenAgentState.finished, screenAgentState.running) {
+        if (screenAgentState.finished && !screenAgentState.running && !agentReported) {
+            agentReported = true
+            val summary = screenAgentState.summary.ifBlank {
+                screenAgentState.error ?: "The agent stopped."
+            }
+            if (lastAgentGoal.isNotBlank()) {
+                viewModel.appendConversationMessages(
+                    context = context,
+                    userText = lastAgentGoal,
+                    assistantText = summary
+                )
+            }
+        }
+        if (screenAgentState.running) agentReported = false
+    }
     val projectionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -1727,6 +1749,7 @@ fun ChatScreen(
                     onExternalInputTextConsumed = { viewModel.clearPendingInputText() },
                     onSendMessage = { text ->
                         if (screenControlEnabled) {
+                            lastAgentGoal = text
                             startScreenAgent(text)
                         } else {
                             viewModel.sendMessage(context, text)

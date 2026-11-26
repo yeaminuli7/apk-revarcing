@@ -21,6 +21,7 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
@@ -36,17 +37,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 /**
- * AssistantBubbleService - a floating bubble that stays on top of every other app, so the
- * agent can be started, stopped and talked to without leaving what the user is doing.
+ * AssistantBubbleService - a small "chat head" that floats above every app, like the
+ * Messenger bubble: a compact circle that can be dragged around, and a tap opens a
+ * chat sheet with the agent (text + voice + typing indicator).
  *
- * Tap the bubble: open a small command bar (typing + voice).
- * Drag the bubble: move it anywhere (position is remembered).
- * Long press: quick menu (stop agent, toggle voice, hide bubble).
+ * The sheet keeps its own short transcript so a conversation started over another app
+ * still reads like a chat, and the same exchange is mirrored into the main app's
+ * conversation history.
  */
 class AssistantBubbleService : Service() {
 
@@ -61,12 +62,14 @@ class AssistantBubbleService : Service() {
         const val ACTION_SHOW = "id.vern.antigravity.action.BUBBLE_SHOW"
         const val ACTION_HIDE = "id.vern.antigravity.action.BUBBLE_HIDE"
 
+        /** Compact chat-head size, matching the Messenger bubble feel. */
+        private const val BUBBLE_DP = 48
+
         @Volatile
         private var isRunning = false
 
         fun isShowing(): Boolean = isRunning
 
-        /** True when the app may draw over other apps. */
         fun canDrawOverlays(context: Context): Boolean =
             android.provider.Settings.canDrawOverlays(context)
 
@@ -108,9 +111,15 @@ class AssistantBubbleService : Service() {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private lateinit var windowManager: WindowManager
     private var bubbleView: View? = null
-    private var commandBar: View? = null
+    private var sheetView: View? = null
     private var bubbleParams: WindowManager.LayoutParams? = null
     private var stateJob: Job? = null
+
+    /** Mini transcript for the floating sheet: role to text. */
+    private val sheetMessages = mutableListOf<Pair<String, String>>()
+    private var sheetList: LinearLayout? = null
+    private var sheetScroll: ScrollView? = null
+    private var bubbleBadge: View? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -118,7 +127,10 @@ class AssistantBubbleService : Service() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         startForegroundNotification()
-        VoiceController.onCommand = { command -> runCommand(command) }
+        VoiceController.onCommand = { command ->
+            // A spoken command opens the floating chat so the user sees the reply.
+            handleUserInput(command, openSheetIfClosed = true)
+        }
         scope.launch {
             VoiceController.state.collectLatest { state ->
                 updateBubbleTint(state.listening, state.speaking, state.awake)
@@ -193,7 +205,7 @@ class AssistantBubbleService : Service() {
         }
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
         return WindowManager.LayoutParams(
-            dp(56), dp(56), type,
+            dp(BUBBLE_DP), dp(BUBBLE_DP), type,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
@@ -209,20 +221,35 @@ class AssistantBubbleService : Service() {
         val params = bubbleParams()
         bubbleParams = params
 
+        // Chat-head look: a clean circle with the app glyph and a small online dot.
         val bubble = FrameLayout(this).apply {
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(0xFF1F2937.toInt())
+                setColor(0xFF111827.toInt())
                 setStroke(dp(2), 0xFF34D399.toInt())
             }
-            elevation = dp(10).toFloat()
+            elevation = dp(8).toFloat()
         }
         val icon = ImageView(this).apply {
             setImageResource(R.drawable.ic_notification)
             setColorFilter(0xFF34D399.toInt())
-            setPadding(dp(12), dp(12), dp(12), dp(12))
+            setPadding(dp(10), dp(10), dp(10), dp(10))
         }
         bubble.addView(icon, FrameLayout.LayoutParams(-1, -1))
+
+        val badge = View(this).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(0xFF34D399.toInt())
+            }
+        }
+        val badgeParams = FrameLayout.LayoutParams(dp(10), dp(10)).apply {
+            gravity = Gravity.TOP or Gravity.END
+            topMargin = dp(2)
+            marginEnd = dp(2)
+        }
+        bubble.addView(badge, badgeParams)
+        bubbleBadge = badge
 
         bubble.setOnTouchListener(object : View.OnTouchListener {
             private var downX = 0f
@@ -239,12 +266,13 @@ class AssistantBubbleService : Service() {
                         startX = params.x
                         startY = params.y
                         dragged = false
+                        v.animate().scaleX(0.92f).scaleY(0.92f).setDuration(90).start()
                         return true
                     }
                     MotionEvent.ACTION_MOVE -> {
                         val dx = event.rawX - downX
                         val dy = event.rawY - downY
-                        if (kotlin.math.abs(dx) > dp(8) || kotlin.math.abs(dy) > dp(8)) dragged = true
+                        if (kotlin.math.abs(dx) > dp(6) || kotlin.math.abs(dy) > dp(6)) dragged = true
                         if (dragged) {
                             params.x = (startX + dx).toInt()
                             params.y = (startY + dy).toInt()
@@ -253,13 +281,14 @@ class AssistantBubbleService : Service() {
                         return true
                     }
                     MotionEvent.ACTION_UP -> {
+                        v.animate().scaleX(1f).scaleY(1f).setDuration(90).start()
                         if (dragged) {
                             getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                                 .putInt(KEY_X, params.x)
                                 .putInt(KEY_Y, params.y)
                                 .apply()
                         } else {
-                            openCommandBar()
+                            toggleSheet()
                         }
                         return true
                     }
@@ -289,30 +318,39 @@ class AssistantBubbleService : Service() {
             try { windowManager.removeView(it) } catch (e: Exception) {}
         }
         bubbleView = null
-        removeCommandBar()
+        removeSheet()
         isRunning = false
     }
 
     private fun updateBubbleTint(listening: Boolean, speaking: Boolean, awake: Boolean) {
         val bubble = bubbleView as? FrameLayout ?: return
         val color = when {
-            speaking -> 0xFF3B82F6.toInt()   // blue: talking
-            awake -> 0xFFF59E0B.toInt()      // amber: heard the wake word
-            listening -> 0xFF34D399.toInt()  // green: listening
-            else -> 0xFF6B7280.toInt()       // grey: idle
+            speaking -> 0xFF3B82F6.toInt()
+            awake -> 0xFFF59E0B.toInt()
+            listening -> 0xFF34D399.toInt()
+            else -> 0xFF6B7280.toInt()
         }
         try {
             (bubble.background as? GradientDrawable)?.setStroke(dp(2), color)
+            (bubbleBadge?.background as? GradientDrawable)?.setColor(color)
         } catch (e: Exception) {}
     }
 
-    // --------------------------------------------------------------- command UI
+    // -------------------------------------------------------------- chat sheet
 
-    private fun openCommandBar() {
-        if (commandBar != null) {
-            removeCommandBar()
-            return
+    private fun toggleSheet() {
+        if (sheetView != null) {
+            removeSheet()
+        } else {
+            openSheet()
         }
+    }
+
+    /**
+     * A Messenger-style conversation card: scrollable transcript, a typing indicator
+     * while the agent works, a text field and a mic button for voice input.
+     */
+    private fun openSheet() {
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         } else {
@@ -321,7 +359,7 @@ class AssistantBubbleService : Service() {
         }
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            dp(360),
             type,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
@@ -330,76 +368,176 @@ class AssistantBubbleService : Service() {
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         }
 
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(10), dp(10), dp(10), dp(10))
             background = GradientDrawable().apply {
-                setColor(0xF2181B1F.toInt())
-                cornerRadius = dp(16).toFloat()
+                setColor(0xF2171A1F.toInt())
+                cornerRadius = dp(18).toFloat()
                 setStroke(dp(1), 0xFF34D399.toInt())
             }
         }
 
+        // header
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(TextView(this).apply {
+            text = "Antigravity"
+            setTextColor(0xFFFFFFFF.toInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+        })
+        header.addView(TextView(this).apply {
+            text = "✕"
+            setTextColor(0xFF9CA3AF.toInt())
+            setPadding(dp(10), 0, dp(4), 0)
+            setOnClickListener { removeSheet() }
+        })
+        root.addView(header)
+
+        // transcript
+        val scroll = ScrollView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(-1, 0, 1f)
+        }
+        val list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(8), 0, dp(8))
+        }
+        scroll.addView(list)
+        root.addView(scroll)
+        sheetList = list
+        sheetScroll = scroll
+        renderSheetMessages()
+
+        // input row
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(6), 0, 0)
+        }
         val input = EditText(this).apply {
-            hint = "Ask Antigravity…"
+            hint = "Message Antigravity…"
             setTextColor(0xFFFFFFFF.toInt())
             setHintTextColor(0xFF9CA3AF.toInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            setSingleLine()
-            background = null
+            maxLines = 4
+            background = GradientDrawable().apply {
+                setColor(0xFF23272E.toInt())
+                cornerRadius = dp(18).toFloat()
+            }
+            setPadding(dp(14), dp(10), dp(14), dp(10))
         }
         row.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
 
-        val mic = TextView(this).apply {
-            text = "🎤"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
-            setPadding(dp(10), dp(6), dp(10), dp(6))
-            setOnClickListener {
-                toggleVoice()
-                val on = VoiceController.state.value.listening
-                text = if (on) "🎤" else "🔇"
-            }
+        val mic = iconButton("🎤") {
+            toggleVoice()
+            Toast.makeText(
+                this,
+                if (VoiceController.state.value.listening) "Voice on — say \"Hey Antigravity\""
+                else "Voice off",
+                Toast.LENGTH_SHORT
+            ).show()
         }
         row.addView(mic)
 
-        val send = TextView(this).apply {
-            text = "➤"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
-            setTextColor(0xFF34D399.toInt())
-            setPadding(dp(10), dp(6), dp(6), dp(6))
-            setOnClickListener {
-                val text = input.text?.toString()?.trim().orEmpty()
-                if (text.isNotEmpty()) {
-                    runCommand(text)
-                    input.setText("")
-                    removeCommandBar()
-                }
+        val send = iconButton("➤") {
+            val text = input.text?.toString()?.trim().orEmpty()
+            if (text.isNotEmpty()) {
+                input.setText("")
+                submitFromSheet(text)
             }
         }
+        send.setTextColor(0xFF34D399.toInt())
         row.addView(send)
 
+        root.addView(row)
+
         try {
-            windowManager.addView(row, params)
-            commandBar = row
+            windowManager.addView(root, params)
+            sheetView = root
             input.requestFocus()
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Could not add command bar: ${e.message}")
+            AppLogger.e(TAG, "Could not add chat sheet: ${e.message}")
         }
     }
 
-    private fun removeCommandBar() {
-        commandBar?.let {
+    private fun iconButton(label: String, onClick: () -> Unit): TextView =
+        TextView(this).apply {
+            text = label
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            setTextColor(0xFFE5E7EB.toInt())
+            setPadding(dp(9), dp(6), dp(9), dp(6))
+            setOnClickListener { onClick() }
+        }
+
+    private fun removeSheet() {
+        sheetView?.let {
             try { windowManager.removeView(it) } catch (e: Exception) {}
         }
-        commandBar = null
+        sheetView = null
+        sheetList = null
+        sheetScroll = null
+    }
+
+    private fun appendSheetMessage(role: String, text: String) {
+        sheetMessages.add(role to text)
+        if (sheetMessages.size > 30) sheetMessages.removeAt(0)
+        renderSheetMessages()
+    }
+
+    private fun renderSheetMessages() {
+        val list = sheetList ?: return
+        list.removeAllViews()
+        if (sheetMessages.isEmpty()) {
+            list.addView(TextView(this).apply {
+                text = "Ask me to do something on your phone — by text or voice."
+                setTextColor(0xFF9CA3AF.toInt())
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                setPadding(0, dp(6), 0, dp(6))
+            })
+        }
+        for ((role, text) in sheetMessages) {
+            val isUser = role == "user"
+            val bubble = TextView(this).apply {
+                this.text = text
+                setTextColor(if (isUser) 0xFFFFFFFF.toInt() else 0xFFE5E7EB.toInt())
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                setPadding(dp(12), dp(8), dp(12), dp(8))
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(14).toFloat()
+                    setColor(if (isUser) 0xFF2563EB.toInt() else 0xFF2B3038.toInt())
+                }
+                layoutParams = LinearLayout.LayoutParams(-2, -2).apply {
+                    gravity = if (isUser) Gravity.END else Gravity.START
+                    topMargin = dp(4)
+                }
+            }
+            list.addView(bubble)
+        }
+        sheetScroll?.post { sheetScroll?.fullScroll(View.FOCUS_DOWN) }
+    }
+
+    /**
+     * Entry point for anything the user says (voice) or types (sheet). Both paths land
+     * here so the floating transcript always shows the command and the answer.
+     */
+    private fun handleUserInput(text: String, openSheetIfClosed: Boolean) {
+        if (openSheetIfClosed && sheetView == null) openSheet()
+        appendSheetMessage("user", text)
+        appendSheetMessage("assistant", "…")
+        runCommand(text)
+    }
+
+    private fun submitFromSheet(text: String) {
+        handleUserInput(text, openSheetIfClosed = false)
     }
 
     // ----------------------------------------------------------------- commands
 
-    /**
-     * Every voice utterance and typed command arrives here. Local keywords are handled
-     * instantly; anything else is handed to the screen agent as a goal.
-     */
     private fun runCommand(raw: String) {
         val text = raw.trim()
         if (text.isEmpty()) return
@@ -408,32 +546,36 @@ class AssistantBubbleService : Service() {
         when {
             lower == "stop" || lower == "cancel" || lower.contains("stop agent") -> {
                 ScreenAgent.stop()
+                appendSheetMessage("assistant", "Stopped.")
                 VoiceController.speak("Stopped.")
                 return
             }
             lower == "hide" || lower.contains("hide bubble") -> {
-                VoiceController.speak("Hiding.")
                 removeBubble()
                 stopSelf()
                 return
             }
             lower == "home" || lower.contains("go home") -> {
                 ScreenControlService.getInstance()?.pressHome()
+                appendSheetMessage("assistant", "Home.")
                 return
             }
             lower == "back" || lower.contains("go back") -> {
                 ScreenControlService.getInstance()?.pressBack()
+                appendSheetMessage("assistant", "Back.")
                 return
             }
         }
 
         if (ScreenControlService.getInstance() == null) {
-            VoiceController.speak("The accessibility service is off. Please enable it in settings.")
+            appendSheetMessage("assistant", "Enable the Antigravity accessibility service first.")
+            VoiceController.speak("The accessibility service is off.")
             Toast.makeText(this, "Enable the Antigravity accessibility service", Toast.LENGTH_LONG).show()
             return
         }
         if (!ScreenCaptureManager.isReady()) {
-            VoiceController.speak("Allow screen sharing in the app first, then try again.")
+            appendSheetMessage("assistant", "Allow screen sharing in the app once, then try again.")
+            VoiceController.speak("Allow screen sharing in the app first.")
             Toast.makeText(this, "Open Antigravity and allow screen sharing once", Toast.LENGTH_LONG).show()
             return
         }
@@ -447,30 +589,41 @@ class AssistantBubbleService : Service() {
             screenHeight = metrics.heightPixels,
             onLog = { line -> AppLogger.d(TAG, line) }
         )
-
-        // Speak the outcome when the run finishes so it works hands-free.
         stateJob?.cancel()
         stateJob = scope.launch {
             ScreenAgent.state.collectLatest { state ->
-                if (state.finished) {
-                    val msg = when {
-                        !state.summary.isBlank() -> state.summary
-                        state.error != null -> state.error ?: "I could not finish that."
-                        else -> "Done."
+                when {
+                    state.running && state.step > 0 -> {
+                        // keep the transcript honest while it works
+                        if (sheetMessages.lastOrNull()?.second == "…") {
+                            sheetMessages[sheetMessages.size - 1] =
+                                "assistant" to "Step ${state.step}: ${state.lastAction.ifBlank { "working" }}…"
+                            renderSheetMessages()
+                        }
                     }
-                    VoiceController.speak(msg)
-                    stateJob?.cancel()
-                } else if (state.running && state.step == 1) {
-                    VoiceController.speak("Working on it.")
+                    state.finished -> {
+                        val msg = when {
+                            state.summary.isNotBlank() -> state.summary
+                            state.error != null -> state.error ?: "I could not finish that."
+                            else -> "Done."
+                        }
+                        // replace the typing line with the real answer
+                        if (sheetMessages.lastOrNull()?.first == "assistant" &&
+                            (sheetMessages.last().second.startsWith("Step ") || sheetMessages.last().second == "…")
+                        ) {
+                            sheetMessages[sheetMessages.size - 1] = "assistant" to msg
+                            renderSheetMessages()
+                        } else {
+                            appendSheetMessage("assistant", msg)
+                        }
+                        VoiceController.speak(msg)
+                        stateJob?.cancel()
+                    }
                 }
             }
         }
     }
 
-    /**
-     * Voice is on by default when the bubble starts, so the agent can be commanded with
-     * "Hey Antigravity …" at any time - the way a phone assistant behaves.
-     */
     private fun autoStartVoice() {
         if (VoiceController.isListening()) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
