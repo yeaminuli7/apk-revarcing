@@ -2207,9 +2207,13 @@ class AntigravityViewModel : ViewModel() {
                         }
 
                         val outputStr = outputSb.toString()
-                        authRequired = outputStr.contains("authentication required", ignoreCase = true) ||
+                        val keyMissing = outputStr.contains("GEMINI_API_KEY", ignoreCase = true) ||
+                                outputStr.contains("is not set", ignoreCase = true)
+                        authRequired = keyMissing ||
+                                outputStr.contains("authentication required", ignoreCase = true) ||
                                 outputStr.contains("authentication failed", ignoreCase = true) ||
-                                outputStr.contains("visit the url to log in", ignoreCase = true)
+                                outputStr.contains("visit the url to log in", ignoreCase = true) ||
+                                outputStr.contains("not logged in", ignoreCase = true)
 
                         val intermediateParsed = parseTranscriptTurn(context, activeCliConvId)
                         val transcriptResponse = intermediateParsed.assistantResponse
@@ -2287,8 +2291,14 @@ class AntigravityViewModel : ViewModel() {
 
                     val transcriptResponse = finalParsed.assistantResponse
                     val finalContent = if (exitCode != 0 && authRequired) {
-                        "The engine asked for a Google account, which this build does not support. " +
-                            "Add a Gemini API key in Settings and try again."
+                        if (GeminiClient.getApiKey(context).isNullOrBlank()) {
+                            "No Gemini API key found. Open Settings > API Key, paste a key from " +
+                                "Google AI Studio, and send the message again."
+                        } else {
+                            "The on-device agent could not authenticate with your Gemini API key. " +
+                                "Check that the key is valid and has the Generative Language API enabled, " +
+                                "then try again."
+                        }
                     } else if (outputSb.isNotEmpty()) {
                         outputSb.toString().trim()
                     } else if (!transcriptResponse.isNullOrBlank()) {
