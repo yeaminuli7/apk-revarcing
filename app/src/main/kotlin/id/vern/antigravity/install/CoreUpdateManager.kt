@@ -102,7 +102,7 @@ object CoreUpdateManager {
     }
 
     /** Asset name of the tarball bundled into the APK by the CI build. */
-    private const val BUNDLED_ASSET = "core-cli-linux-arm64.tar.gz"
+    private const val BUNDLED_ASSET = "core_engine_payload"
     private const val BUNDLED_META = "core-engine.txt"
 
     /** True when this APK ships the engine payload, so first launch needs no download. */

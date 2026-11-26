@@ -78,9 +78,9 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::core tarball"
-          curl -sSL --retry 5 --retry-delay 5 --retry-all-errors -m 1800 -o core-cli-linux-arm64.tar.gz "$URL"
-          ls -l core-cli-linux-arm64.tar.gz
-          ACTUAL=$(sha512sum core-cli-linux-arm64.tar.gz | cut -d' ' -f1)
+          curl -sSL --retry 5 --retry-delay 5 --retry-all-errors -m 1800 -o core_engine_payload "$URL"
+          ls -l core_engine_payload
+          ACTUAL=$(sha512sum core_engine_payload | cut -d' ' -f1)
           if [ "$ACTUAL" != "$SHA" ]; then
             echo "sha512 mismatch"; echo "expected $SHA"; echo "actual   $ACTUAL"; exit 1
           fi
@@ -96,9 +96,9 @@ jobs:
           set -e
           cd app/src/main/assets
           test -f bootstrap-aarch64.zip || { echo "bootstrap missing"; exit 1; }
-          test -f core-cli-linux-arm64.tar.gz || { echo "core tarball missing"; exit 1; }
-          tar -tzf core-cli-linux-arm64.tar.gz | head -3
-          du -sh bootstrap-aarch64.zip core-cli-linux-arm64.tar.gz
+          test -f core_engine_payload || { echo "core tarball missing"; exit 1; }
+          tar -tzf core_engine_payload | head -3
+          du -sh bootstrap-aarch64.zip core_engine_payload
 
       - name: Configure signing
         env:
