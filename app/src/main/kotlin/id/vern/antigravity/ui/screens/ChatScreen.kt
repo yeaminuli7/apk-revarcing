@@ -71,6 +71,7 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
+import android.content.Context
 import android.widget.Toast
 import id.vern.antigravity.data.RunningSubagent
 import id.vern.antigravity.ui.components.AgentDetailsBottomSheet
@@ -96,6 +97,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
@@ -1682,25 +1684,6 @@ fun ChatScreen(
         }
     }
 
-    if (showModelSelector) {
-        LaunchedEffect(Unit) {
-            viewModel.refreshUserQuota(context)
-            viewModel.refreshCliModels(context)
-        }
-        ModelSelectorDialog(
-            selectedModel = selectedModel,
-            selectedThinking = thinkingBudget,
-            userQuotaSummary = userQuotaSummary,
-            codeAssistTier = codeAssistTier,
-            cliModels = cliModels,
-            modelsErrorMessage = quotaErrorMessage,
-            onModelSelected = { model, thinking, cliId ->
-                viewModel.setModel(context, model, thinking, cliId)
-            },
-            onDismissRequest = { viewModel.dismissModelSelector() }
-        )
-    }
-
     if (screenAgentState.running || screenAgentState.finished) {
         Surface(
             shape = RoundedCornerShape(12.dp),
@@ -1753,6 +1736,25 @@ fun ChatScreen(
                 }
             }
         }
+    }
+
+    if (showModelSelector) {
+        LaunchedEffect(Unit) {
+            viewModel.refreshUserQuota(context)
+            viewModel.refreshCliModels(context)
+        }
+        ModelSelectorDialog(
+            selectedModel = selectedModel,
+            selectedThinking = thinkingBudget,
+            userQuotaSummary = userQuotaSummary,
+            codeAssistTier = codeAssistTier,
+            cliModels = cliModels,
+            modelsErrorMessage = quotaErrorMessage,
+            onModelSelected = { model, thinking, cliId ->
+                viewModel.setModel(context, model, thinking, cliId)
+            },
+            onDismissRequest = { viewModel.dismissModelSelector() }
+        )
     }
 
     if (showApiKeyDialogState) {

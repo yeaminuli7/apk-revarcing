@@ -1,9 +1,0 @@
-e: app/src/main/kotlin/id/vern/antigravity/accessibility/ScreenControlService.kt:282:16 Return type mismatch: expected 'kotlin.Boolean', actual 'kotlin.Unit'.
-e: app/src/main/kotlin/id/vern/antigravity/accessibility/ScreenControlService.kt:287:23 Return type mismatch: expected 'kotlin.Unit', actual 'kotlin.Boolean'.
-e: app/src/main/kotlin/id/vern/antigravity/accessibility/ScreenControlService.kt:291:16 Return type mismatch: expected 'kotlin.Unit', actual 'kotlin.Boolean'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ChatScreen.kt:1650:64 Unresolved reference 'Context'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ChatScreen.kt:1730:25 Unresolved reference 'TextButton'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ChatScreen.kt:1731:29 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ChatScreen.kt:1734:25 Unresolved reference 'TextButton'.
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ChatScreen.kt:1735:29 @Composable invocations can only happen from the context of a @Composable function
-e: app/src/main/kotlin/id/vern/antigravity/ui/screens/ChatScreen.kt:197:48 Unresolved reference 'Context'.

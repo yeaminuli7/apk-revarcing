@@ -282,11 +282,9 @@ class ScreenControlService : AccessibilityService() {
         return sendTextAsKeys(text)
     }
 
-    private fun sendTextAsKeys(text: String) {
-        val ime = getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
-            ?: return false
-        // No public API to inject text without an input connection; report failure so the
-        // agent can retry with a different strategy.
+    private fun sendTextAsKeys(text: String): Boolean {
+        // Android offers no public text injection without an input connection; report
+        // failure so the agent can retry with a different strategy.
         Log.w(TAG, "typeInto fallback unavailable for text length ${text.length}")
         return false
     }
