@@ -82,6 +82,35 @@ object BootstrapInstaller {
         lastError = null
         lastStackTrace = null
 
+        // The Termux prefix is intact (bash + .installed) but the core engine is missing or
+        // broken. Do not re-download the whole 85 MB bootstrap: repair just the engine.
+        val prefixOk = File(prefix, "bin/bash").isFile && File(prefix, MARKER_FILE).isFile
+        if (prefixOk && engineProblem(context) != null) {
+            AppLogger.w("Boot", "Prefix present but engine unusable - repairing engine only")
+            val repaired = try {
+                engine.mkdirs()
+                onProgress("Verifying glibc runtime...", 0.55f)
+                if (!File(engine, "glibc/lib/ld-linux-aarch64.so.1").isFile) {
+                    extractGlibc(context, engine)
+                }
+                installCoreEngine(context) { msg, p -> onProgress(msg, 0.6f + p * 0.3f) }
+                onProgress("Configuring CLI tools & agy-daemon...", 0.9f)
+                deployOverlayAndTools(context, prefix, engine)
+                ensurePermissions(context)
+                createAgyWrapper(filesDir, prefix, engine)
+                verifyEngine(context)
+                engineProblem(context) == null
+            } catch (e: Throwable) {
+                AppLogger.e("Boot", "Engine-only repair threw: ${e.message} - falling back to full install")
+                false
+            }
+            if (repaired) {
+                onProgress("Environment ready", 1.0f)
+                return@withContext true
+            }
+            AppLogger.e("Boot", "Engine-only repair failed - falling back to full install")
+        }
+
         try {
             File(filesDir, "home").mkdirs()
             File(filesDir, "tmp").mkdirs()
