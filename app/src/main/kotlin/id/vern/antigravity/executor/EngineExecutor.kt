@@ -133,6 +133,7 @@ object EngineExecutor {
             env["AGY_APPLICATION_ID"] = context.packageName
             env["APPLICATION_ID"] = context.packageName
             env["ANTIGRAVITY_APP_DATA_DIR"] = File(homeDir, ".gemini/antigravity-cli").apply { mkdirs() }.absolutePath
+            CliAuth.applyEnvironment(context, env)
 
             val process = pb.start()
 
@@ -330,6 +331,7 @@ object EngineExecutor {
                 env["AGY_APPLICATION_ID"] = context.packageName
                 env["APPLICATION_ID"] = context.packageName
                 env["ANTIGRAVITY_APP_DATA_DIR"] = File(homeDir, ".gemini/antigravity-cli").apply { mkdirs() }.absolutePath
+            CliAuth.applyEnvironment(context, env)
 
                 streamProcess(pb, onOutputLine)
             } catch (e: Exception) {
@@ -384,6 +386,7 @@ object EngineExecutor {
                 env["AGY_APPLICATION_ID"] = context.packageName
                 env["APPLICATION_ID"] = context.packageName
                 env["ANTIGRAVITY_APP_DATA_DIR"] = File(homeDir, ".gemini/antigravity-cli").apply { mkdirs() }.absolutePath
+            CliAuth.applyEnvironment(context, env)
                 streamProcess(pb, onOutputLine)
             } catch (e: Exception) {
                 onOutputLine("Engine wrapper execution failed: ${e.message}", true)
@@ -551,6 +554,7 @@ object EngineExecutor {
         env["AGY_APPLICATION_ID"] = context.packageName
         env["APPLICATION_ID"] = context.packageName
         env["ANTIGRAVITY_APP_DATA_DIR"] = File(homeDir, ".gemini/antigravity-cli").apply { mkdirs() }.absolutePath
+        CliAuth.applyEnvironment(context, env)
 
         val process = try {
             pb.start()
@@ -812,6 +816,10 @@ object EngineExecutor {
 
     fun healEnvironment(context: Context, force: Boolean = false) {
         if (isEnvironmentHealed && !force) return
+        // Keep the CLI able to authenticate with the API key (no Google sign-in).
+        try {
+            CliAuth.applySettings(context)
+        } catch (e: Exception) {}
         try {
             val filesDir = context.filesDir
             val prefix = File(filesDir, "usr")

@@ -138,6 +138,14 @@ object PermissionConfigService {
                 userSettings.put("planReviewPolicy", state.planReviewPolicy)
                 userSettings.put("securityPreset", state.securityPreset)
 
+                // The bundled agy talks to the Gemini API with the user's key, so it must
+                // not look for a Google sign-in session.
+                try {
+                    if (!id.vern.antigravity.api.GeminiClient.getApiKey(context).isNullOrBlank()) {
+                        root.put("modelProvider", "gemini")
+                    }
+                } catch (e: Exception) {}
+
                 settingsFile.writeText(root.toString(2), Charsets.UTF_8)
                 settingsFile.setReadable(true, false)
                 settingsFile.setWritable(true, false)
