@@ -185,3 +185,24 @@ command line work again without Google sign-in.
   so a failed turn tells the user whether the key is missing or rejected.
 - If Google rejects the key for this client, the fallback path is `GOOGLE_GEMINI_BASE_URL`
   against the public endpoint; not implemented because unverified.
+
+## Round 5 — free-tier 429 (build-44/45)
+
+The user hit a Gemini 429 after build-43: `limit: 5, model: gemini-2.5-flash`.
+That proved the API-key path leaves the device and reaches Gemini, but the agent
+died mid-task on the first quota answer.
+
+Root causes and fixes:
+
+| Cause | Fix |
+| --- | --- |
+| `ScreenAgent` fired up to 25 requests back to back, no pacing | `MIN_REQUEST_INTERVAL_MS = 4_500` enforced between steps |
+| A 429 was a fatal `ToolTurn.error` → `"Stopped: ..."` | `ToolTurn.rateLimited` / `retryAfterMs`; up to `MAX_RATE_LIMIT_RETRIES = 4` retries honouring the server's hint |
+| Retry hint never parsed | `GeminiClient.parseRetryDelayMs` reads `Please retry in 4.94s` and `retryDelay`, clamped 1–70 s |
+| Every past screenshot stayed in `history`, so each step resent MBs | `ScreenAgent.trimOldScreenshots` keeps images for only the last `SCREENSHOT_WINDOW = 2` observations (text/tree kept) |
+| Raw Google JSON shown in chat | `quotaMessage()` + a quota branch in `AntigravityViewModel` explain the free-tier limit and the paid option |
+| Plain chat also 429'd hard | `sendMessage` retries twice via `sendMessageOnce` |
+
+Result: **build-45** — https://github.com/yeaminuli7/apk-revarcing/releases/download/build-45/Antigravity-1.0.1-release.apk (184,806,957 B).
+Run 45786598884 (success); run 45786040005 failed on a Kotlin `Missing return
+statement` in `sendMessageOnce` (fixed in `1cdf6de`).
